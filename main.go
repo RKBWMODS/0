@@ -162,10 +162,14 @@ func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
 
 func printLogo() {
 	logo := "" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣤⣤⣄⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣷⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧\n" +
-		"              ──────┘                    ──────┘\n"
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣤⣶⣾⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣷⣶⣦⣤⣀\n" +
+		"⠀⠀⠀⠀⠀.⣴⣶⣿⣿⣿⣿⣿⣿⣷⣄⠀⠀⠀⠀⣧⣼⠀⠀⠀⠀⣀⣴⣿⣿⣿⣿⣿⣿⣷⣦⣄⡀\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠛⣿⣿⣿⣿⣿⣷⣦⣀⣾⣿⣿⣷⣀⣤⣿⣯⣿⣿⣿⣿⠟⠋⠉\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠿⠿⠿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⠿⠿⠋\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠻⣿⣿⣿⣿⠿⠋⠁\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠋\n" +
+		" ╭> [ TOP 1 DOS ] <╮  ╭> [ PWR 1 SVR ] <╮\n" +
+		" ╰> [ DIZ FLYZE ] <╯  ╰> [ CMD & TMX ] <╯\n" 
 	fmt.Println(logo)
 }
 
@@ -291,16 +295,6 @@ func main() {
 		json.Unmarshal(b, &cfg)
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-fmt.Print("MASUKAN LINK : ")
-link, _ := reader.ReadString('\n')
-link = strings.TrimSpace(link)
-
-if link == "" {
-    fmt.Println(Merah("LINK TIDAK BOLEH KOSONG"))
-    os.Exit(1)
-}
-
 	var proxies []string
 	if *proxySources != "" {
 		s := strings.Split(*proxySources, ",")
@@ -350,6 +344,16 @@ if link == "" {
 
 	fmt.Print("\033[H\033[2J")
     printLogo()
+    
+reader := bufio.NewReader(os.Stdin)
+fmt.Print("+ ──> LINK : ")
+link, _ := reader.ReadString('\n')
+link = strings.TrimSpace(link)
+
+if link == "" {
+    fmt.Println(Merah("LINK TIDAK BOLEH KOSONG"))
+    os.Exit(1)
+}
 
 	lt := NewLoadTester(link, numReq, conc, timeout, "GET", headers, proxies)
 	ctx, cancel := context.WithCancel(context.Background())
