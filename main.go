@@ -162,14 +162,10 @@ func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
 
 func printLogo() {
 	logo := "" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣤⣶⣾⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣷⣶⣦⣤⣀\n" +
-		"⠀⠀⠀⠀⠀.⣴⣶⣿⣿⣿⣿⣿⣿⣷⣄⠀⠀⠀⠀⣧⣼⠀⠀⠀⠀⣀⣴⣿⣿⣿⣿⣿⣿⣷⣦⣄⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠉⠉⠛⣿⣿⣿⣿⣿⣷⣦⣀⣾⣿⣿⣷⣀⣤⣿⣯⣿⣿⣿⣿⠟⠋⠉\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠿⠿⠿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠿⠿⠿⠋\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠻⣿⣿⣿⣿⠿⠋⠁\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠋\n" +
-		" ╭> [ TOP 1 DOS ] <╮  ╭> [ PWR 1 SVR ] <╮\n" +
-		" ╰> [ DIZ FLYZE ] <╯  ╰> [ CMD & TMX ] <╯\n" 
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣤⣤⣄⡀\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣷⡀\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧\n" +
+		"              ──────┘                    ──────┘\n"
 	fmt.Println(logo)
 }
 
@@ -284,8 +280,6 @@ func main() {
 		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxies-Ercin/https.txt",
 		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxy-Zaeem20/https.txt",
 		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxy-hendrikbgr/proxy_list.txt",
-		"https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/socks5.txt",
-		"https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/socks5/socks5.txt",
 	}
 
 	noLive := flag.Bool("no-live", false, "Matikan live output")
@@ -304,9 +298,9 @@ func main() {
 	} else {
 		proxies = fetchProxies(defaultSources)
 	}
-	
+
 reader := bufio.NewReader(os.Stdin)
-fmt.Print("+ ──> LINK : ")
+fmt.Print("+--[ LINK ] : ")
 link, _ := reader.ReadString('\n')
 link = strings.TrimSpace(link)
 
@@ -352,6 +346,24 @@ if link == "" {
 		"method": "GET",
 		"pragma": "no-cache",
 		"sec-fetch-user": "?1",
+		"Accept-Language":          "en-US,en;q=0.9,id;q=0.8",
+		"CF-IPCountry":             "US",
+		"Via":                      "1.1 google",
+		"Origin":                   "https://www.google.com",
+		"Access-Control-Allow-Origin": "*",
+		"Device-Memory":            "8",
+		"Downlink":                 "10",
+		"ECT":                      "4g",
+		"RTT":                      "50",
+		"Save-Data":                "on",
+		"Viewport-Width":           "1920",
+		"Width":                    "1920",
+		"X-ATT-DeviceId":           "GT-N7100",
+		"X-Wap-Profile":            "http://wap.samsungmobile.com/uaprof/GT-N7100.xml",
+		"X-UIDH":                   "1234567890abcdef",
+		"X-Csrf-Token":             "null",
+		"X-Api-Version":            "1",
+		"X-Client-Data":            "CI22yQEIo7bJAQjEtskBCKmdygEIqKPKAQ==",
 	}
 
 	fmt.Print("\033[H\033[2J")
