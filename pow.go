@@ -63,8 +63,8 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	}
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        90000,
-		MaxIdleConnsPerHost: 90000,
+		MaxIdleConns:        30000,
+		MaxIdleConnsPerHost: 30000,
 		IdleConnTimeout:     3 * time.Second,
 		TLSHandshakeTimeout: 3 * time.Second,
 		DialContext: (&net.Dialer{
@@ -146,31 +146,6 @@ func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
 
 func printLogo() {
 	logo := "" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣤⣤⣄⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣷⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⣿⣿⣿⣿⣿⣿⡿⠃\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠻⠿⠿⠿⠟⠋\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣶⣿⣿⣶⣄\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣷\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⡟⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣶⣾⣿⣶⣶⣤⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠘⢿⣿⣿⣿⣷⡀⠀⠀⠀⠀⠀⠀⠀⠀⠠⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀⠀⠈⠻⣿⣿⣿⣿⣆⠀⠀⠀⢀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⡟⠀⣀⣤⣶⣶⣌⠻⣿⣿⣿⣷⡄⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠹⣿⣿⣿⣿⣿⣿⣿⠁⣰⣿⣿⣿⣿⣿⣦⣙⢿⣿⣿⣿⠄⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⢿⣿⣿⣿⣿⣿⣿⠀⣿⣿⣿⣿⣿⣿⣿⣿⣦⣹⣟⣫⣼⣿⣿⣶⣿⣿⣿⣿⣿⣿⣯⡉⠉⠉⠁\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠈⣿⣿⣿⣿⣿⣿⡆⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⡇⠀⢻⣿⣿⣿⣿⣿⡇⠀⠀⠈⠉⠉⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉\n" +
-		"⠀⣠⣴⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⡇⠀⠸⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠹⢿⣿⣿⢿⣿⣿⣿⡿\n" +
-		"⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢰⣶⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣧⣄⣐⣀⣀⣀⣀⣀⡀\n" +
-		"⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢸⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠉⠉⠙⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠁⠛⠛⠛⠛⠛⠛⠛⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠁\n" +
 		"┌──────                   ┌──────\n" +
 		"  DIZ FLYZE PRIVATE         FAST SEND REQUESTS\n" +
 		"  JATENG X PLOIT V5         6 BYPAS CLOUDFLARE\n" +
@@ -207,12 +182,12 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
   					  Hijau(":"),
                         Cyan("["),
    					 Putih(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
- 					   Putih("DETIK"),
+ 					   Putih("DET"),
                         Cyan("]"),
    					 Hijau(":"),
                         Cyan("["),
   					  Hijau(fmt.Sprintf("%d", total)),
-                        Putih("REQUESTS"),
+                        Putih("REQ"),
                         Cyan("]"),
 		    	)
 				fmt.Println(summary)
@@ -273,7 +248,7 @@ func main() {
 	configPath := flag.String("config", "", "FILE JSON")
 	urlFlag := flag.String("url", "", "LINK URL")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 500, "CONCURRENCY")
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
 	timeoutFlag := flag.Float64("timeout", 2, "WAKTU SETIAP REQUEST (detik)")
 	methodFlag := flag.String("method", "GET", "HTTP METHOD (GET/POST/ETC)")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
