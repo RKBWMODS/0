@@ -284,6 +284,8 @@ func main() {
 		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxies-Ercin/https.txt",
 		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxy-Zaeem20/https.txt",
 		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxy-hendrikbgr/proxy_list.txt",
+		"https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/socks5.txt",
+		"https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/socks5/socks5.txt",
 	}
 
 	noLive := flag.Bool("no-live", false, "Matikan live output")
@@ -302,6 +304,16 @@ func main() {
 	} else {
 		proxies = fetchProxies(defaultSources)
 	}
+	
+reader := bufio.NewReader(os.Stdin)
+fmt.Print("+ ──> LINK : ")
+link, _ := reader.ReadString('\n')
+link = strings.TrimSpace(link)
+
+if link == "" {
+    fmt.Println(Merah("LINK TIDAK BOLEH KOSONG"))
+    os.Exit(1)
+}
 
 	numReq := *requestsFlag
 	if v, ok := cfg["requests"].(float64); ok {
@@ -344,16 +356,6 @@ func main() {
 
 	fmt.Print("\033[H\033[2J")
     printLogo()
-    
-reader := bufio.NewReader(os.Stdin)
-fmt.Print("+ ──> LINK : ")
-link, _ := reader.ReadString('\n')
-link = strings.TrimSpace(link)
-
-if link == "" {
-    fmt.Println(Merah("LINK TIDAK BOLEH KOSONG"))
-    os.Exit(1)
-}
 
 	lt := NewLoadTester(link, numReq, conc, timeout, "GET", headers, proxies)
 	ctx, cancel := context.WithCancel(context.Background())
