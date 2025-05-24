@@ -63,8 +63,8 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	}
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        50000,
-		MaxIdleConnsPerHost: 50000,
+		MaxIdleConns:        90000,
+		MaxIdleConnsPerHost: 90000,
 		IdleConnTimeout:     3 * time.Second,
 		TLSHandshakeTimeout: 3 * time.Second,
 		DialContext: (&net.Dialer{
@@ -223,20 +223,17 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 			} else {
 				remaining := currentCycleDuration - elapsed
 				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
-				line := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				line := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s",
 			    	Cyan(symbols[symbolIndex%len(symbols)]),
 			    	Merah("["),
 					Putih("OTW"),
 					Merah("]"),
-					Kuning(":"),
 					Merah("["),
                     Hijau(timerStr),
 					Merah("]"),
 					Putih("RPS"),
-					Kuning(":"),
 					Hijau(fmt.Sprintf("%d", pending)),
 					Putih("AVG"),
-					Kuning(":"),
                     Hijau(fmt.Sprintf("%d", avgLatency)),
 				)
 				symbolIndex++
@@ -276,7 +273,7 @@ func main() {
 	configPath := flag.String("config", "", "FILE JSON")
 	urlFlag := flag.String("url", "", "LINK URL")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
+	concurrencyFlag := flag.Int("concurrency", 500, "CONCURRENCY")
 	timeoutFlag := flag.Float64("timeout", 2, "WAKTU SETIAP REQUEST (detik)")
 	methodFlag := flag.String("method", "GET", "HTTP METHOD (GET/POST/ETC)")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
