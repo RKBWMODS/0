@@ -39,6 +39,12 @@ var scraper = []string{
 	"https://raw.githubusercontent.com/saisuiu/Lionkings-Http-Proxys-Proxies/main/socks5.txt",
 	"https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/socks5.txt",
 	"https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks5_all.txt",
+	"https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks5/data.txt",
+	"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxies-Ercin/socks5.txt",
+	"https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/https.txt",
+	"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxies-Ercin/https.txt",
+	"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxy-Zaeem20/https.txt",
+	"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxy-hendrikbgr/proxy_list.txt",
 }
 
 var (
