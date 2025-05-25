@@ -236,6 +236,30 @@ func animate(ctx context.Context, lt *LoadTester, currentCycleDuration time.Dura
 	}
 }
 
+func loadProxiesFromFile(path string) []string {
+	var proxies []string
+	file, err := os.Open(path)
+	if err != nil {
+		log.Fatalf("Gagal membuka file proxy.txt: %v", err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			if !strings.Contains(line, "://") {
+				line = "socks5://" + line
+			}
+			proxies = append(proxies, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Gagal membaca file proxy.txt: %v", err)
+	}
+	rand.Shuffle(len(proxies), func(i, j int) { proxies[i], proxies[j] = proxies[j], proxies[i] })
+	return proxies
+}
+
 func fetchProxies(urls []string) []string {
 	var out []string
 	client := &http.Client{Timeout: 3 * time.Second}
@@ -268,19 +292,6 @@ func main() {
 	requestsFlag := flag.Int64("requests", 1000000000, "Total requests")
 	concurrencyFlag := flag.Int("concurrency", 550, "Concurrency")
 	timeoutFlag := flag.Float64("timeout", 2, "Timeout per request (detik)")
-	proxySources := flag.String("proxy-sources", "", "Comma-separated proxy list URLs (optional)")
-
-	defaultSources := []string{
-		"https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/socks5/data.txt",
-		"https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
-		"https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt",
-		"https://raw.githubusercontent.com/MuRongPIG/Proxy-Master/main/socks5.txt",
-		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxies-Ercin/socks5.txt",
-		"https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/https.txt",
-		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxies-Ercin/https.txt",
-		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxy-Zaeem20/https.txt",
-		"https://raw.githubusercontent.com/handeveloper1/Proxy/main/Proxy-hendrikbgr/proxy_list.txt",
-	}
 
 	noLive := flag.Bool("no-live", false, "Matikan live output")
 	flag.Parse()
@@ -292,12 +303,7 @@ func main() {
 	}
 
 	var proxies []string
-	if *proxySources != "" {
-		s := strings.Split(*proxySources, ",")
-		proxies = fetchProxies(s)
-	} else {
-		proxies = fetchProxies(defaultSources)
-	}
+	proxies = loadProxiesFromFile("proxy.txt")
 
 reader := bufio.NewReader(os.Stdin)
 fmt.Print("+--[ LINK ] : ")
@@ -394,4 +400,3 @@ if link == "" {
 	cancel()
 	fmt.Println("\n" + Hijau(">> SUKSES <<"))
 }
-
