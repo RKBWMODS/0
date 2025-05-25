@@ -63,8 +63,8 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	}
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        30000,
-		MaxIdleConnsPerHost: 30000,
+		MaxIdleConns:        50000,
+		MaxIdleConnsPerHost: 50000,
 		IdleConnTimeout:     3 * time.Second,
 		TLSHandshakeTimeout: 3 * time.Second,
 		DialContext: (&net.Dialer{
@@ -146,10 +146,10 @@ func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
 
 func printLogo() {
 	logo := "" +
-		"┌──────                   ┌──────\n" +
-		"  DIZ FLYZE PRIVATE         FAST SEND REQUESTS\n" +
-		"  JATENG X PLOIT V5         6 BYPAS CLOUDFLARE\n" +
-		"              ──────┘                    ──────┘\n"
+		"\n" +
+		"\n" +
+		"\n" +
+		"\n"
 	fmt.Println(logo)
 }
 
@@ -248,7 +248,7 @@ func main() {
 	configPath := flag.String("config", "", "FILE JSON")
 	urlFlag := flag.String("url", "", "LINK URL")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
+	concurrencyFlag := flag.Int("concurrency", 850, "CONCURRENCY")
 	timeoutFlag := flag.Float64("timeout", 2, "WAKTU SETIAP REQUEST (detik)")
 	methodFlag := flag.String("method", "GET", "HTTP METHOD (GET/POST/ETC)")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
