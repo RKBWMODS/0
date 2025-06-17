@@ -28,7 +28,10 @@ var (
 	concurrency  = 550
 	referers     []string
 	secHeaders   []string
-	countries = []string{
+	orgs         []string
+	domains      []string
+	paths        []string
+	countries    = []string{
     "US", "GB", "DE", "FR", "CA", "JP", "AU", "BR", "IN", "SG",
     "NL", "KR", "ID", "MY", "VN", "TH", "PH", "IT", "ES", "MX",
     "CN", "HK", "TW", "ZA", "NG", "NO", "SE", "CH", "AE", "SA",
@@ -69,6 +72,9 @@ const (
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	initReferers()
+	initOrgs()
+	initDomains()
+	initPaths()
 	initSecHeaders()
 }
 
@@ -503,7 +509,7 @@ func GCH() string {
 	return fmt.Sprintf("%x", b)
 }
 
-func GON() string {
+func initOrgs() {
 	orgs = []string{
         "Google LLC", "Amazon Inc", "Microsoft Corp", "Apple Inc", "Cloudflare Inc",
         "Akamai Technologies", "DigitalOcean LLC", "Oracle Corporation", "IBM Corp", "Tencent Holdings",
@@ -720,11 +726,10 @@ func GON() string {
         "Farfetch Limited", "Wayfair Inc", "Overstock.com", "Houzz Inc", "IKEA Group",
         "Home Depot Inc", "Lowe's Companies Inc", "Best Buy Co", "Newegg Inc", "B&H Photo Video",
         "Micro Center Inc",
-    }
-	return orgs[rand.Intn(len(orgs))]
+	}
 }
 
-func GFH() string {
+func initDomains() {
 	domains = []string{
         "cdn", "static", "assets", "images", "js", "css", "api", "gateway", "edge", "origin", "lb", "cache",
         "media", "video", "audio", "files", "uploads", "downloads", "content", "stream", "proxy", "auth",
@@ -802,10 +807,9 @@ func GFH() string {
         "meetups1", "meetups2", "meetups3", "meetups4", "meetups5", "webinar1", "webinar2", "webinar3", "webinar4", "webinar5",
         "conference1", "conference2", "conference3", "conference4", "conference5", "live1", "live2", "live3", "live4", "live5",
 	}
-	return domains[rand.Intn(len(domains))] + ".example.com"
 }
 
-func GFP() string {
+func initPaths() {
 	paths = []string{
         "wp-admin", "wp-login", "api", "v2", "graphql",
         "rest", "oauth", "auth", "login", "account",
@@ -854,12 +858,44 @@ func GFP() string {
         "web", "mobile", "desktop", "app", "widget",
         "auth/login", "auth/signup", "auth/reset", "auth/verify", "auth/2fa",
         "content/articles", "content/videos", "content/podcasts", "content/guides", "content/newsletters",
-    }
+	}
+}
+
+func GRDN() string {
+	if len(domains) == 0 {
+		return "example.com"
+	}
+	return domains[rand.Intn(len(domains))] + ".example.com"
+}
+
+func GRPH() string {
+	if len(paths) == 0 {
+		return "path"
+	}
 	return paths[rand.Intn(len(paths))] + "/" + GT()[:8]
+}
+
+func GROG() string {
+	if len(orgs) == 0 {
+		return "Unknown Org"
+	}
+	return orgs[rand.Intn(len(orgs))]
 }
 
 func GRIP() string {
 	return fmt.Sprintf("%d.%d.%d.%d", rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(256))
+}
+
+func GON() string {
+	return GROG()
+}
+
+func GFH() string {
+	return GRDN()
+}
+
+func GFP() string {
+	return GRPH()
 }
 
 func GRR() string {
@@ -949,164 +985,21 @@ func CH2T() *http.Transport {
 				tls.TLS_AES_128_GCM_SHA256,
 		    	tls.TLS_AES_256_GCM_SHA384,
 				tls.TLS_CHACHA20_POLY1305_SHA256,
-				tls.TLS_AES_128_CCM_SHA256,
-				tls.TLS_AES_128_CCM_8_SHA256,
 				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
 				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
 				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-				tls.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384,
 				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
 				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384,
 				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
 				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
 				tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
 				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_DHE_RSA_WITH_AES_128_CBC_SHA256,
-				tls.TLS_DHE_RSA_WITH_AES_256_CBC_SHA256,
-				tls.TLS_DHE_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_DHE_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_DHE_DSS_WITH_AES_128_CBC_SHA256,
-				tls.TLS_DHE_DSS_WITH_AES_256_CBC_SHA256,
-				tls.TLS_DHE_DSS_WITH_AES_128_CBC_SHA,
-				tls.TLS_DHE_DSS_WITH_AES_256_CBC_SHA,
 				tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
 				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 				tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA256,
-				tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_RSA_WITH_RC4_128_SHA,
-				tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
-				tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
-				tls.TLS_EMPTY_RENEGOTIATION_INFO_SCSV,
-				tls.TLS_FALLBACK_SCSV,
-				tls.TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256,
-				tls.TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256,
-				tls.TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384,
-				tls.TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384,
-				tls.TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDH_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDH_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_ECDH_ECDSA_WITH_RC4_128_SHA,
-				tls.TLS_ECDH_RSA_WITH_RC4_128_SHA,
-				tls.TLS_PSK_WITH_AES_128_GCM_SHA256,
-				tls.TLS_PSK_WITH_AES_256_GCM_SHA384,
-				tls.TLS_PSK_WITH_AES_128_CBC_SHA256,
-				tls.TLS_PSK_WITH_AES_256_CBC_SHA384,
-				tls.TLS_PSK_WITH_AES_128_CBC_SHA,
-				tls.TLS_PSK_WITH_AES_256_CBC_SHA,
-				tls.TLS_PSK_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_PSK_WITH_RC4_128_SHA,
-				tls.TLS_DHE_PSK_WITH_AES_128_GCM_SHA256,
-				tls.TLS_DHE_PSK_WITH_AES_256_GCM_SHA384,
-				tls.TLS_DHE_PSK_WITH_AES_128_CBC_SHA256,
-				tls.TLS_DHE_PSK_WITH_AES_256_CBC_SHA384,
-				tls.TLS_DHE_PSK_WITH_AES_128_CBC_SHA,
-				tls.TLS_DHE_PSK_WITH_AES_256_CBC_SHA,
-				tls.TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_DHE_PSK_WITH_RC4_128_SHA,
-				tls.TLS_RSA_PSK_WITH_AES_128_GCM_SHA256,
-				tls.TLS_RSA_PSK_WITH_AES_256_GCM_SHA384,
-				tls.TLS_RSA_PSK_WITH_AES_128_CBC_SHA256,
-				tls.TLS_RSA_PSK_WITH_AES_256_CBC_SHA384,
-				tls.TLS_RSA_PSK_WITH_AES_128_CBC_SHA,
-				tls.TLS_RSA_PSK_WITH_AES_256_CBC_SHA,
-				tls.TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_RSA_PSK_WITH_RC4_128_SHA,
-				tls.TLS_PSK_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_RSA_WITH_NULL_SHA256,
-				tls.TLS_RSA_WITH_NULL_SHA,
-				tls.TLS_RSA_WITH_NULL_MD5,
-				tls.TLS_ECDHE_ECDSA_WITH_NULL_SHA,
-				tls.TLS_ECDHE_RSA_WITH_NULL_SHA,
-				tls.TLS_ECDH_ECDSA_WITH_NULL_SHA,
-				tls.TLS_ECDH_RSA_WITH_NULL_SHA,
-				tls.TLS_PSK_WITH_NULL_SHA256,
-				tls.TLS_PSK_WITH_NULL_SHA,
-				tls.TLS_DHE_PSK_WITH_NULL_SHA256,
-				tls.TLS_DHE_PSK_WITH_NULL_SHA,
-				tls.TLS_RSA_PSK_WITH_NULL_SHA256,
-				tls.TLS_RSA_PSK_WITH_NULL_SHA,
-				tls.TLS_CAMELLIA_128_CBC_SHA,
-				tls.TLS_CAMELLIA_256_CBC_SHA,
-				tls.TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA,
-				tls.TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA,
-				tls.TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA,
-				tls.TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA,
-				tls.TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384,
-				tls.TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384,
-				tls.TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256,
-				tls.TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256,
-				tls.TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256,
-				tls.TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384,
-				tls.TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384,
-				tls.TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-				tls.TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-				tls.TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256,
-				tls.TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384,
-				tls.TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256,
-				tls.TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384,
-				tls.TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_ECDHE_PSK_WITH_RC4_128_SHA,
-				tls.TLS_ECDHE_PSK_WITH_NULL_SHA256,
-				tls.TLS_ECDHE_PSK_WITH_NULL_SHA,
-				tls.TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_SRP_SHA_WITH_AES_128_CBC_SHA,
-				tls.TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA,
-				tls.TLS_SRP_SHA_WITH_AES_256_CBC_SHA,
-				tls.TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA,
-				tls.TLS_KRB5_WITH_3DES_EDE_CBC_SHA,
-				tls.TLS_KRB5_WITH_RC4_128_SHA,
-				tls.TLS_KRB5_WITH_AES_128_CBC_SHA,
-				tls.TLS_KRB5_WITH_AES_256_CBC_SHA,
-				tls.TLS_KRB5_WITH_DES_CBC_MD5,
-				tls.TLS_KRB5_WITH_3DES_EDE_CBC_MD5,
-				tls.TLS_KRB5_WITH_RC4_128_MD5,
-				tls.TLS_KRB5_WITH_AES_128_CBC_MD5,
-				tls.TLS_KRB5_WITH_AES_256_CBC_MD5,
-				tls.TLS_KRB5_WITH_DES_CBC_MD5,
-				tls.TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA,
-				tls.TLS_KRB5_EXPORT_WITH_RC4_40_SHA,
-				tls.TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5,
-				tls.TLS_KRB5_EXPORT_WITH_RC4_40_MD5,
 			},
 			CurvePreferences: []tls.CurveID{
 				tls.X25519,
