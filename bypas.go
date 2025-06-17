@@ -909,30 +909,21 @@ func GRR() string {
 }
 
 func L() {
-	fmt.Println(Red + `
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣴⣶⣿⣿⣶⣶⣶⣶⣦⣤⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⠶⠿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡄⢀⠴⠀⠀⠀⠀⠀⠀⠀⠈⠙⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣄⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣎⣴⣋⣠⣤⣔⣠⣤⣤⣠⣀⣀⠀⠀⠈⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣄⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⣠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣂⠈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⡀⠀⠀
-⠀⠀⠀⠀⠀⠀⢠⡾⣻⣿⣿⣿⣿⠿⠿⠿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣷⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⣿⣧⡀⠀
-⠀⠀⠀⠀⠀⣀⣾⣿⣿⣿⠿⠛⠂⠀⠀⡀⠀⠀⠈⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡈⢻⣿⣿⣆⠈⢻⣧⠀
-⠀⠀⠀⠀⠻⣿⠛⠉⠀⠀⠀⠀⢀⣤⣾⣿⣦⣤⣤⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣄⠙⢿⣿⣿⣿⡇⠀⢻⣿⣿⡀⠀⠻⡆
-⠀⠀⣰⣤⣤⣤⣤⣤⣤⣴⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠈⢻⣿⣿⣿⠀⠀⢹⣿⣇⠀⠀⠳
-⠀⢰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⢻⠛⠛⠻⣿⣿⣿⣿⣿⣿⣿⣧⠀⢻⣿⣿⡆⠀⠀⢻⣿⠀⠀⠀
-⠀⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠁⠀⠼⠛⢿⣶⣦⣿⣿⠻⣿⣿⣿⣿⣿⣇⠀⢻⣿⡇⠀⠀⠀⣿⠀⠀⠀
-⠸⠛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣟⠀⠀⠀⠀⠀⠘⠁⠈⠛⠋⠀⠘⢿⣿⣿⣿⣿⡀⠈⣿⡇⠀⠀⠀⢸⡇⠀⠀
-⠀⠈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⣿⣿⣿⣿⡇⠀⢹⠇⠀⠀⠀⠈⠀⠀⠀
-⠀⠀⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⡇⠀⠼⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⡉⠛⠛⠿⠿⣦⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢈⣿⣿⣿⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⡀⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠘⢿⣿⣿⣿⣷⡀⠉⠙⠻⠿⢿⣿⣷⣤⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣾⣿⡟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠈⠻⣿⣿⣿⣷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⠏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠙⠿⣿⣿⣦⡀⠀⠀⠀⠀⠀⠀⠀⢀⡄⠀⠀⠀⢀⣠⣾⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠛⠿⢦⣀⠀⠀⠀⢀⣴⣿⣧⣤⣴⣾⡿⠛⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⠛⠛⠛⠛⠛⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-       ⠀    DizXJateng - Bypass CF 
+	fmt.Println(Cyan + `
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣴⣶⣶⣤⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣤⣄⠀
+⠀⠀⣴⣶⣶⣶⣶⣶⣾⣿⣿⡿⢿⣿⣿⣦⣤⣤⣤⣤⣤⣤⣶⣿⣿⣿⣿⣷
+⠀⠀⢻⣿⣿⣿⣿⣿⣿⣿⣿⣀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟
+⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃
+⠀⠀⣠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢿⣿⠋⣿⡏⢹⡟⠉⣿⠉⠀⠀
+⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⠀⠈⠁⠀⠉⠀⠈⠁⠀⠉⠀⠀⠀
+⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⣀⡀⠀⠀⣀⣠⣶⣦⠀⠀
+⠀⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⠀⠀⠀⠉⠛⠿⣿⣿⣿⠿⠟⠋⠀⠀⠀
+⠀⠀⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣄⠀⢀⡀⠀⣀⡀⢀⡀⠀⣀⠀⠀⠀
+⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣿⣷⣾⣷⣶⣿⣶⣶⡀
+⠀⠻⠿⠿⠿⠿⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠙⠛⠻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠙⠛⠛⠿⠛⠛⠋⠀⠀⠀⠀
+        ⠀    Dizflyze V6 - Bypass CF 
 ` + Reset)
 }
 
@@ -1011,8 +1002,8 @@ func CH2T() *http.Transport {
 			ClientSessionCache: tls.NewLRUClientSessionCache(1000),
 		},
 		DisableKeepAlives:   false,
-		MaxIdleConns:        50000,
-		MaxIdleConnsPerHost: 50000,
+		MaxIdleConns:        30000,
+		MaxIdleConnsPerHost: 30000,
 		MaxConnsPerHost:     0,
 		IdleConnTimeout:     3 * time.Second,
 		DialContext: (&net.Dialer{
@@ -1124,7 +1115,7 @@ func AW(target string, host string, wg *sync.WaitGroup, stopChan chan struct{}) 
 func main() {
 	L()
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print(Reset + "╔═[ddos]Dizflyze Streser]\n╚═══➤ " + Reset)
+	fmt.Print(Reset + "╔═[ddos]Dizflyze Streser]\n╚══➤ " + Reset)
 	input, _ := reader.ReadString('\n')
 	target := strings.TrimSpace(input)
 
@@ -1161,7 +1152,7 @@ func main() {
 				success := atomic.LoadInt64(&successCount)
 				RPS := float64(total) / elapsed.Seconds()
 				
-				fmt.Printf("\r%s%s%s REQ: %s%d%s | OK: %s%d%s | R: %s%.0f", 
+				fmt.Printf("\r%s%s%s REQ: %s%d%s | OK: %s%d%s | RPS: %s%.0f", 
 						    Reset, time.Now().Format("04:05"), Reset,
  						   Yellow, total, Reset,
  						   Green, success, Reset,
@@ -1185,16 +1176,16 @@ func main() {
 	RPS := float64(TR) / elapsed.Seconds()
 
 	L()
-	fmt.Println(Red + "╔══════════════════════════════════════════════════════════╗" + Reset)
-	fmt.Printf("%s│%s Target         : %s%s\n", Red, Reset, Yellow, target)
-	fmt.Printf("%s│%s Host           : %s%s\n", Red, Reset, Yellow, host)
-	fmt.Printf("%s│%s Host IP        : %s%s\n", Red, Reset, Yellow, HIP)
-	fmt.Printf("%s│%s ISP            : %s%s\n", Red, Reset, Cyan, ISP)
-	fmt.Printf("%s│%s ASN            : %s%s\n", Red, Reset, Cyan, ASN)
-	fmt.Printf("%s│%s Country        : %s%s\n", Red, Reset, Cyan, CHS)
-	fmt.Printf("%s│%s Duration       : %s\n", Red, Reset, elapsed.Round(time.Second))
-	fmt.Printf("%s│%s Total Requests : %s%d\n", Red, Reset, Yellow, TR)
-	fmt.Printf("%s│%s Success        : %s%d\n", Red, Reset, Green, SR)
-	fmt.Printf("%s│%s RPS            : %s%.0f\n", Red, Reset, Cyan, RPS)
-	fmt.Println(Red + "╚══════════════════════════════════════════════════════════╝" + Reset)
+	fmt.Println(Yellow + "╔══════════════════════════════════════════════╗" + Reset)
+	fmt.Printf("%s│%s Target     : %s%s\n", Yellow, Reset, Green, target) 
+	fmt.Printf("%s│%s Host       : %s%s\n", Yellow, Reset, Green, host)
+	fmt.Printf("%s│%s Host IP    : %s%s\n", Yellow, Reset, Green, HIP)
+	fmt.Printf("%s│%s ISP        : %s%s\n", Yellow, Reset, Green, ISP)
+	fmt.Printf("%s│%s ASN        : %s%s\n", Yellow, Reset, Green, ASN)
+	fmt.Printf("%s│%s Country    : %s%s\n", Yellow, Reset, Green, CHS)
+	fmt.Printf("%s│%s Duration   : %s\n", Yellow, Reset, elapsed.Round(time.Second))
+	fmt.Printf("%s│%s Total Req  : %s%d\n", Yellow, Reset, Green, TR)
+	fmt.Printf("%s│%s Success    : %s%d\n", Yellow, Reset, Green, SR)
+	fmt.Printf("%s│%s RPS        : %s%.0f\n", Yellow, Reset, Green, RPS)
+	fmt.Println(Yellow + "╚══════════════════════════════════════════════╝" + Reset)
 }
