@@ -1058,10 +1058,10 @@ func CH2T() *http.Transport {
 		DisableKeepAlives:   false, // jangan true!
 		MaxIdleConns:        100000, // jangan di ubah
 		MaxIdleConnsPerHost: 50000, // jangan di ubah
-		IdleConnTimeout:     10 * time.Second, // jangan di ubah
+		IdleConnTimeout:     3 * time.Second, // jangan di ubah
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second, // jangan di ubah
-			KeepAlive: 15 * time.Second, // jangan di ubah
+			KeepAlive: 3 * time.Second, // jangan di ubah
 			DualStack: true,
 		}).DialContext,
 		ForceAttemptHTTP2:     true, // http2 true
