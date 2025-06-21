@@ -65,23 +65,28 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	// Jangan di otak atik ini udah pas super fast no komen.
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        50000,
+		MaxIdleConns:        70000,
 		MaxIdleConnsPerHost: 50000,
-		IdleConnTimeout:     2 * time.Second,
-		TLSHandshakeTimeout: 1 * time.Second,
+		IdleConnTimeout:     3 * time.Second,
+		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
-			KeepAlive: 2 * time.Second, 
+			KeepAlive: 1 * time.Second, 
 			DualStack: true, // Jangan di set ulang
 		}).DialContext,
+		// DI ATAS BAGIAN FITAL! JANGAN DI APA APAIN
 	}
 	if err := http2.ConfigureTransport(transport); err != nil {
 		log.Fatalf("Gagal mengonfigurasi HTTP/2: %v", err)
 	}
 	client := &http.Client{
-		Transport: transport,
-		Timeout:   timeout,
-	}
+    Transport: transport,
+    Timeout: timeout,
+    DisableKeepAlives: false,
+    CheckRedirect: func(req *http.Request, via []*http.Request) error {
+        return http.ErrUseLastResponse
+    },
+}
 
 	return &LoadTester{
 		Link:        Link,
@@ -263,12 +268,12 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps.
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
 	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST") // Jangan di set ulang
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
-	proxyFile := flag.String("proxy", "", "FILE PROXY")
+	proxyFile := flag.String("proxy", "", "FILE PROXY") //Gak perlu boar ngebut pake 1 ip real aja
 	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING")
 	flag.Parse()
 	if strings.ToUpper(*logFlag) == "DEBUG" {
