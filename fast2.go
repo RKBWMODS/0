@@ -69,10 +69,9 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		MaxIdleConnsPerHost: 50000,
 		IdleConnTimeout:     3 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
-		DisableKeepAlives: false,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
-			KeepAlive: 1 * time.Second, 
+			KeepAlive: 2 * time.Second, 
 			DualStack: true, // Jangan di set ulang
 		}).DialContext,
 		// DI ATAS BAGIAN FITAL! JANGAN DI APA APAIN
