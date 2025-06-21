@@ -67,7 +67,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		Proxy:               proxyFunc,
 		MaxIdleConns:        50000,
 		MaxIdleConnsPerHost: 50000,
-		IdleConnTimeout:     3 * time.Second,
+		IdleConnTimeout:     2 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
@@ -263,7 +263,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 555, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps.
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps.
 	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST") // Jangan di set ulang
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
