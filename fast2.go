@@ -69,6 +69,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		MaxIdleConnsPerHost: 50000,
 		IdleConnTimeout:     3 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
+		DisableKeepAlives: false,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
 			KeepAlive: 1 * time.Second, 
@@ -82,9 +83,6 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	client := &http.Client{
     Transport: transport,
     Timeout: timeout,
-    CheckRedirect: func(req *http.Request, via []*http.Request) error {
-        return http.ErrUseLastResponse
-    },
 }
 
 	return &LoadTester{
