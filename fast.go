@@ -72,7 +72,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		TLSHandshakeTimeout: 1 * time.Second,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
-			KeepAlive: 3 * time.Second, 
+			KeepAlive: 2 * time.Second, 
 			DualStack: true, // Jangan di set ulang
 		}).DialContext,
 	}
@@ -204,11 +204,10 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 			} else { // Jangan di set ulang
 				remaining := currentCycleDuration - elapsed
 				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
-				line := fmt.Sprintf("%s %s %s %s %s %s %s %s",
+				line := fmt.Sprintf("%s %s %s %s %s %s %s",
 			    	Cyan(symbols[symbolIndex%len(symbols)]),
-					Merah("["),
+					Putih("➤"),
                     Hijau(timerStr),
-					Merah("]"),
 					Putih("➤"),
 					Hijau(fmt.Sprintf("%d", pending)),
 					Putih("➤"),
@@ -236,12 +235,12 @@ func loadConfig(configPath string) (map[string]interface{}, error) {
 func getIP(Link string) string {
 	parsed, err := url.Parse(Link)
 	if err != nil {
-		return "Unknown"
+		return "Tidak Terdeteksi"
 	}
 	host := parsed.Hostname()
 	addrs, err := net.LookupHost(host)
 	if err != nil || len(addrs) == 0 {
-		return "Unknown"
+		return "Tidak Terdeteksi"
 	}
 	return addrs[0]
 }
@@ -250,8 +249,8 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 555, "CONCURRENCY")  //550 Cloudshell & 200 Termux & 750 Vps.
-	timeoutFlag := flag.Float64("timeout", 2.7, "WAKTU SETIAP REQUEST") // Jangan di set ulang
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //550 Cloudshell & 200 Termux & 750 Vps.
+	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST") // Jangan di set ulang
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
@@ -287,7 +286,7 @@ func main() {
 	method := strings.ToUpper(*methodFlag)
 	headers := map[string]string{
 		"User-Agent":      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", // Jangan di set ulang
-		"Connection": "keep-alive", // Jangan di set ulang
+		"Connection":      "keep-alive", 
 	}
 	var proxies []string
 	if *proxyFile != "" {
@@ -334,5 +333,5 @@ func main() {
 	wg.Wait()
 	cancel()
 	animWg.Wait()
-	fmt.Println("\n" + Hijau(">> SUKSES <<"))
+	fmt.Println("\n" + Hijau("Thanks!"))
 }
