@@ -69,7 +69,6 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		MaxIdleConnsPerHost: 50000,
 		IdleConnTimeout:     3 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
-		DisableKeepAlives: false,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
 			KeepAlive: 1 * time.Second, 
@@ -269,7 +268,7 @@ func main() {
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
 	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
-	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST") // Jangan di set ulang
+	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST") // Jangan di set ulang
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
