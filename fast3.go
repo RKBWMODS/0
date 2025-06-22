@@ -372,7 +372,7 @@ func main() {
 			Link,
 			reqs,
 			concurrencyPerWorker,
-			time.Duration(timeoutSec*float64(time.Second),
+			time.Duration(timeoutSec*float64(time.Second)),
 			method,
 			headers,
 			proxies,
@@ -383,10 +383,13 @@ func main() {
 		)
 		
 		wg.Add(1)
-		go func() {
+		go func(lt *LoadTester) {
 			defer wg.Done()
-			lt.run(ctx, &wg)
-		}()
+			var innerWg sync.WaitGroup
+			innerWg.Add(1)
+			lt.run(ctx, &innerWg)
+			innerWg.Wait()
+		}(lt)
 	}
 	
 	// Buat dummy LoadTester untuk animasi dengan shared counter
@@ -402,7 +405,7 @@ func main() {
 		animWg.Add(1)
 		go func() {
 			defer animWg.Done()
-			animate(ctx, dummyLt, 60*time.Second, 1*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second))
+			animate(ctx, dummyLt, 60*time.Second, 1*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second)))
 		}()
 	}
 	
@@ -421,7 +424,7 @@ func main() {
 	
 	fmt.Printf("\n%s%s%s\n", Hijau("✔ "), Hijau(fmt.Sprintf("%d", success)), Hijau(" Success"))
 	fmt.Printf("%s%s%s\n", Merah("✘ "), Merah(fmt.Sprintf("%d", failure)), Merah(" Failed"))
-	fmt.Printf("%s%s%s\n", Cyan("⌛ "), Cyan(fmt.Sprintf("%d ms")), Cyan(" Avg Latency"))
+	fmt.Printf("%s%s%s\n", Cyan("⌛ "), Cyan(fmt.Sprintf("%d ms", avgLatency)), Cyan(" Avg Latency"))
 	fmt.Printf("%s%s%s\n\n", Ungu("➤ "), Ungu(fmt.Sprintf("%d", total)), Ungu(" Total Requests"))
 	fmt.Println(Hijau("Thanks!"))
 }
