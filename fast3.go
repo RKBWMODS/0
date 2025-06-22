@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"runtime"
 
 	"golang.org/x/net/http2"
 )
@@ -184,7 +183,7 @@ func printLogo() {
 }
 
 func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
-	symbols := []string{"⧓", "⧗"}
+	symbols := []string{"⬒", "⬓", "⬔", "⬕"}
 	symbolIndex := 0
 	currentCycleDuration := initialCycleDuration
 	startCycle := time.Now()
@@ -263,10 +262,9 @@ func getIP(Link string) string {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	runtime.GOMAXPROCS(runtime.NumCPU())
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
+	concurrencyFlag := flag.Int("concurrency", 555, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
 	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST") // Jangan di set ulang
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
