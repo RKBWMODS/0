@@ -274,7 +274,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
+	concurrencyFlag := flag.Int("concurrency", 1100, "CONCURRENCY")
 	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST")
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
