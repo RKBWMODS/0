@@ -68,12 +68,12 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		Proxy: proxyFunc,
 		MaxIdleConns:        50000,
 		MaxIdleConnsPerHost: 50000,
-		IdleConnTimeout:     120 * time.Second,
+		IdleConnTimeout:     3 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second,
 		DisableCompression:  true,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
-			KeepAlive: 120 * time.Second,
+			KeepAlive: 1 * time.Second,
 			DualStack: true,
 		}).DialContext,
 	}
