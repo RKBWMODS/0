@@ -67,7 +67,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		Proxy:               proxyFunc,
 		MaxIdleConns:        70000,
 		MaxIdleConnsPerHost: 50000,
-		IdleConnTimeout:     3 * time.Second,
+		IdleConnTimeout:     2 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
@@ -183,7 +183,7 @@ func printLogo() {
 }
 
 func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
-	symbols := []string{"▁", "▃", "▄", "▅", "▇"}
+	symbols := []string{"⧓", "⧗"}
 	symbolIndex := 0
 	currentCycleDuration := initialCycleDuration
 	startCycle := time.Now()
