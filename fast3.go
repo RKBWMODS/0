@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"runtime"
 
 	"golang.org/x/net/http2"
 )
@@ -46,15 +47,15 @@ type LoadTester struct {
 	method           string
 	headers          map[string]string
 	proxies          []string
-	successCount     int64
-	failureCount     int64
-	sentCount        int64
-	totalLatency     int64
+	successCount     *int64 // Pointer ke atomic counter
+	failureCount     *int64 // Pointer ke atomic counter
+	sentCount        *int64 // Pointer ke atomic counter
+	totalLatency     *int64 // Pointer ke atomic counter
 	lastResponseCode string
 	client           *http.Client
 }
 
-func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *LoadTester {
+func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string, success, failure, sent, latency *int64) *LoadTester {
 	var proxyFunc func(*http.Request) (*url.URL, error)
 	if len(proxies) > 0 {
 		proxyFunc = func(req *http.Request) (*url.URL, error) {
@@ -66,7 +67,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
 		MaxIdleConns:        70000,
-		MaxIdleConnsPerHost: 70000,
+		MaxIdleConnsPerHost: 50000,
 		IdleConnTimeout:     2 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
 		DialContext: (&net.Dialer{
@@ -80,9 +81,9 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		log.Fatalf("Gagal mengonfigurasi HTTP/2: %v", err)
 	}
 	client := &http.Client{
-    Transport: transport,
-    Timeout: timeout,
-}
+        Transport: transport,
+        Timeout: timeout,
+    }
 
 	return &LoadTester{
 		Link:        Link,
@@ -92,6 +93,10 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		method:      method,
 		headers:     headers,
 		proxies:     proxies,
+		successCount: success,
+		failureCount: failure,
+		sentCount:    sent,
+		totalLatency: latency,
 		client:      client,
 	}
 }
@@ -100,7 +105,7 @@ func (lt *LoadTester) sendRequest(ctx context.Context) {
 	startTime := time.Now()
 	req, err := http.NewRequestWithContext(ctx, lt.method, lt.Link, nil)
 	if err != nil {
-		atomic.AddInt64(&lt.failureCount, 1)
+		atomic.AddInt64(lt.failureCount, 1)
 		lt.lastResponseCode = "ERROR"
 		return
 	}
@@ -109,18 +114,18 @@ func (lt *LoadTester) sendRequest(ctx context.Context) {
 	}
 	resp, err := lt.client.Do(req)
 	latency := time.Since(startTime)
-	atomic.AddInt64(&lt.totalLatency, latency.Nanoseconds())
 	if err != nil {
-		atomic.AddInt64(&lt.failureCount, 1)
+		atomic.AddInt64(lt.failureCount, 1)
 		lt.lastResponseCode = "ERROR"
 		return
 	}
 	defer resp.Body.Close()
 	lt.lastResponseCode = fmt.Sprintf("%d", resp.StatusCode)
+	atomic.AddInt64(lt.totalLatency, latency.Nanoseconds())
 	if resp.StatusCode == 200 {
-		atomic.AddInt64(&lt.successCount, 1)
+		atomic.AddInt64(lt.successCount, 1)
 	} else {
-		atomic.AddInt64(&lt.failureCount, 1)
+		atomic.AddInt64(lt.failureCount, 1)
 	}
 }
 
@@ -141,7 +146,7 @@ func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
                 case <-ctx.Done():
                     return
                 default:
-                    atomic.AddInt64(&lt.sentCount, 1)
+                    atomic.AddInt64(lt.sentCount, 1)
                     lt.sendRequest(ctx)
                 }
             }
@@ -195,12 +200,16 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 			return
 		case <-ticker.C:
 			elapsed := time.Since(startCycle)
-			pending := atomic.LoadInt64(&lt.sentCount) - (atomic.LoadInt64(&lt.successCount) + atomic.LoadInt64(&lt.failureCount))
-			done := atomic.LoadInt64(&lt.successCount) + atomic.LoadInt64(&lt.failureCount)
+			success := atomic.LoadInt64(lt.successCount)
+			failure := atomic.LoadInt64(lt.failureCount)
+			sent := atomic.LoadInt64(lt.sentCount)
+			pending := sent - (success + failure)
+			done := success + failure
 			var avgLatency int64
 			if done > 0 {
-				avgLatency = atomic.LoadInt64(&lt.totalLatency) / done / 1e6
-			} // Jangan di set ulang
+				totalLatency := atomic.LoadInt64(lt.totalLatency)
+				avgLatency = totalLatency / done / 1e6
+			}
 			if elapsed >= currentCycleDuration {
 				total := done
 				summary := fmt.Sprintf("%s %s %s %s %s %s",
@@ -216,7 +225,7 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 				fmt.Print("\033[2A\033[J")
 				currentCycleDuration += 60 * time.Second
 				startCycle = time.Now()
-			} else { // Jangan di set ulang
+			} else {
 				remaining := currentCycleDuration - elapsed
 				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
 				line := fmt.Sprintf("%s %s %s %s %s %s %s",
@@ -262,14 +271,15 @@ func getIP(Link string) string {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
-	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST") // Jangan di set ulang
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
+	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST")
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
-	proxyFile := flag.String("proxy", "", "FILE PROXY") //Gak perlu boar ngebut pake 1 ip real aja
+	proxyFile := flag.String("proxy", "", "FILE PROXY")
 	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING")
 	flag.Parse()
 	if strings.ToUpper(*logFlag) == "DEBUG" {
@@ -298,7 +308,6 @@ func main() {
 	if val, ok := configData["timeout"].(float64); ok {
 		timeoutSec = val
 	}
-	//Sengaja biar requests ngebut
 	method := strings.ToUpper(*methodFlag)
 	headers := map[string]string{
 		"User-Agent":      "curl/7.81.0",
@@ -325,7 +334,6 @@ func main() {
 	fmt.Print(Putih("➤ "))
 	fmt.Scanln(&Link)
 	
-	lt := NewLoadTester(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigChan := make(chan os.Signal, 1)
@@ -335,19 +343,85 @@ func main() {
 		fmt.Printf("\n%sDATA: %v. OFF TASK%s\n", Merah(""), sig, RESET)
 		cancel()
 	}()
+	
+	// Setup shared counters
+	var (
+		sharedSuccess     = new(int64)
+		sharedFailure     = new(int64)
+		sharedSent        = new(int64)
+		sharedTotalLatency = new(int64)
+	)
+	
+	// Tentukan jumlah worker (sesuai core CPU)
+	numWorkers := 2 // Untuk CloudShell 2 core
+	requestsPerWorker := numRequests / int64(numWorkers)
+	remainder := numRequests % int64(numWorkers)
+	concurrencyPerWorker := concurrency / numWorkers
+	if concurrencyPerWorker < 1 {
+		concurrencyPerWorker = 1
+	}
+	
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		reqs := requestsPerWorker
+		if i == 0 {
+			reqs += remainder
+		}
+		
+		lt := NewLoadTester(
+			Link,
+			reqs,
+			concurrencyPerWorker,
+			time.Duration(timeoutSec*float64(time.Second),
+			method,
+			headers,
+			proxies,
+			sharedSuccess,
+			sharedFailure,
+			sharedSent,
+			sharedTotalLatency,
+		)
+		
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lt.run(ctx, &wg)
+		}()
+	}
+	
+	// Buat dummy LoadTester untuk animasi dengan shared counter
+	dummyLt := &LoadTester{
+		successCount: sharedSuccess,
+		failureCount: sharedFailure,
+		sentCount:    sharedSent,
+		totalLatency: sharedTotalLatency,
+	}
+	
 	var animWg sync.WaitGroup
 	if !*noLiveFlag {
 		animWg.Add(1)
 		go func() {
 			defer animWg.Done()
-			animate(ctx, lt, 60*time.Second, 1*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second)))
+			animate(ctx, dummyLt, 60*time.Second, 1*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second))
 		}()
 	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go lt.run(ctx, &wg)
+	
 	wg.Wait()
 	cancel()
 	animWg.Wait()
-	fmt.Println("\n" + Hijau("Thanks!"))
+	
+	// Print final stats
+	success := atomic.LoadInt64(sharedSuccess)
+	failure := atomic.LoadInt64(sharedFailure)
+	total := success + failure
+	var avgLatency int64
+	if total > 0 {
+		avgLatency = atomic.LoadInt64(sharedTotalLatency) / total / 1e6
+	}
+	
+	fmt.Printf("\n%s%s%s\n", Hijau("✔ "), Hijau(fmt.Sprintf("%d", success)), Hijau(" Success"))
+	fmt.Printf("%s%s%s\n", Merah("✘ "), Merah(fmt.Sprintf("%d", failure)), Merah(" Failed"))
+	fmt.Printf("%s%s%s\n", Cyan("⌛ "), Cyan(fmt.Sprintf("%d ms")), Cyan(" Avg Latency"))
+	fmt.Printf("%s%s%s\n\n", Ungu("➤ "), Ungu(fmt.Sprintf("%d", total)), Ungu(" Total Requests"))
+	fmt.Println(Hijau("Thanks!"))
 }
