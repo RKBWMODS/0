@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"runtime"
 
 	"golang.org/x/net/http2"
 )
@@ -38,7 +39,7 @@ func Kuning(text string) string { return KUNING + text + RESET }
 func Ungu(text string) string   { return UNGU + text + RESET }
 func Cyan(text string) string   { return CYAN + text + RESET }
 
-type LoadTester struct {
+type FastRequests struct {
 	Link             string
 	numRequests      int64
 	concurrency      int
@@ -54,7 +55,7 @@ type LoadTester struct {
 	client           *http.Client
 }
 
-func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *LoadTester {
+func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *FastRequests {
 	var proxyFunc func(*http.Request) (*url.URL, error)
 	if len(proxies) > 0 {
 		proxyFunc = func(req *http.Request) (*url.URL, error) {
@@ -66,7 +67,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
 		MaxIdleConns:        70000,
-		MaxIdleConnsPerHost: 50000,
+		MaxIdleConnsPerHost: 0,
 		IdleConnTimeout:     2 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
 		DialContext: (&net.Dialer{
@@ -84,7 +85,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
     Timeout: timeout,
 }
 
-	return &LoadTester{
+	return &FastRequests{
 		Link:        Link,
 		numRequests: numRequests,
 		concurrency: concurrency,
@@ -96,7 +97,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	}
 }
 
-func (lt *LoadTester) sendRequest(ctx context.Context) {
+func (lt *FastRequests) sendRequest(ctx context.Context) {
 	startTime := time.Now()
 	req, err := http.NewRequestWithContext(ctx, lt.method, lt.Link, nil)
 	if err != nil {
@@ -124,7 +125,7 @@ func (lt *LoadTester) sendRequest(ctx context.Context) {
 	}
 }
 
-func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
+func (lt *FastRequests) run(ctx context.Context, wg *sync.WaitGroup) {
     defer wg.Done()
     
     // Pembantu pemercepat
@@ -182,7 +183,7 @@ func printLogo() {
 	fmt.Println(logo)
 }
 
-func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
+func animate(ctx context.Context, lt *FastRequests, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
 	symbols := []string{"⬒", "⬓", "⬔", "⬕"}
 	symbolIndex := 0
 	currentCycleDuration := initialCycleDuration
@@ -262,9 +263,10 @@ func getIP(Link string) string {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 555, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
 	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST") // Jangan di set ulang
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
@@ -325,7 +327,7 @@ func main() {
 	fmt.Print(Putih("➤ "))
 	fmt.Scanln(&Link)
 	
-	lt := NewLoadTester(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
+	lt := FastSpamRequests(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigChan := make(chan os.Signal, 1)
