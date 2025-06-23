@@ -66,8 +66,8 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 	// Jangan di otak atik ini udah pas super fast no komen.
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        70000,
-		MaxIdleConnsPerHost: 0,
+		MaxIdleConns:        50000,
+		MaxIdleConnsPerHost: 50000,
 		IdleConnTimeout:     2 * time.Second,
 		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
 		DialContext: (&net.Dialer{
