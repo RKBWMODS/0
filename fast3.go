@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -77,15 +76,6 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 			KeepAlive: 2 * time.Second,
 			DualStack: true,
 		}).DialContext,
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-			MinVersion:         tls.VersionTLS12,
-			CurvePreferences:   []tls.CurveID{tls.X25519, tls.CurveP256},
-			CipherSuites: []uint16{
-				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-			},
-		},
-		ForceAttemptHTTP2: true,
 	}
 
 	if err := http2.ConfigureTransport(transport); err != nil {
@@ -95,9 +85,6 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
 	}
 
 	return &FastRequests{
