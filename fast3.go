@@ -71,7 +71,7 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 		MaxIdleConns:        20000,
 		MaxIdleConnsPerHost: 20000,
 		IdleConnTimeout:     2 * time.Second,
-		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
+		TLSHandshakeTimeout: 500 * time.Millisecond,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
 			KeepAlive: 2 * time.Second, 
