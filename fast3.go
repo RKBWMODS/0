@@ -1,5 +1,3 @@
-
-
 package main
 
 import (
@@ -70,11 +68,11 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 		Proxy:               proxyFunc,
 		MaxIdleConns:        20000,
 		MaxIdleConnsPerHost: 20000,
-		IdleConnTimeout:     1 * time.Second,
-		TLSHandshakeTimeout: 500 * time.Millisecond,
+		IdleConnTimeout:     2 * time.Second,
+		TLSHandshakeTimeout: 250 * time.Millisecond,
 		DialContext: (&net.Dialer{
-			Timeout:   1 * time.Second,
-			KeepAlive: 1 * time.Second, 
+			Timeout:   2 * time.Second,
+			KeepAlive: 2 * time.Second, 
 			DualStack: true, // Jangan di set ulang
 		}).DialContext,
 		// DI ATAS BAGIAN FITAL! JANGAN DI APA APAIN
@@ -186,7 +184,7 @@ func printLogo() {
 }
 
 func animate(ctx context.Context, lt *FastRequests, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
-	symbols := []string{"⬒", "⬓", "⬔", "⬕"}
+	symbols := []string{"⚡"}
 	symbolIndex := 0
 	currentCycleDuration := initialCycleDuration
 	startCycle := time.Now()
@@ -269,7 +267,7 @@ func main() {
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
 	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
-	timeoutFlag := flag.Float64("timeout", 2, "WAKTU SETIAP REQUEST") // Jangan di set ulang
+	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST") // Jangan di set ulang
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
@@ -305,7 +303,7 @@ func main() {
 	//Sengaja biar requests ngebut
 	method := strings.ToUpper(*methodFlag)
 	headers := map[string]string{
-		"User-Agent":      "curl/7.81.0",
+		"User-Agent":      "Go-http-client/1.1",
 		"Connection":      "keep-alive", 
 	}
 	var proxies []string
