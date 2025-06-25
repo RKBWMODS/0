@@ -66,10 +66,10 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 	// Jangan di otak atik ini udah pas super fast no komen.
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        20000,
-		MaxIdleConnsPerHost: 20000,
+		MaxIdleConns:        25000,
+		MaxIdleConnsPerHost: 25000,
 		IdleConnTimeout:     2 * time.Second,
-		TLSHandshakeTimeout: 250 * time.Millisecond,
+		TLSHandshakeTimeout: 150 * time.Millisecond,
 		DialContext: (&net.Dialer{
 			Timeout:   2 * time.Second,
 			KeepAlive: 2 * time.Second, 
@@ -272,7 +272,7 @@ func main() {
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
 	proxyFile := flag.String("proxy", "", "FILE PROXY") //Gak perlu boar ngebut pake 1 ip real aja
-	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING")
+	updateIntervalFlag := flag.Float64("update-interval", 0.05, "KECEPATAN LOADING")
 	flag.Parse()
 	if strings.ToUpper(*logFlag) == "DEBUG" {
 		log.SetOutput(os.Stdout)
@@ -303,8 +303,7 @@ func main() {
 	//Sengaja biar requests ngebut
 	method := strings.ToUpper(*methodFlag)
 	headers := map[string]string{
-		"User-Agent":      "Go-http-client/1.1",
-		"Connection":      "keep-alive", 
+		"Connection":      "keep-alive",  //katanya ai biar aktif requestsnya ga lemot bikin ulang mulu
 	}
 	var proxies []string
 	if *proxyFile != "" {
