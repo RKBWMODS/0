@@ -268,17 +268,17 @@ func Config() {
 		b = false
 
 	default:
-		if THREAD == 0 {
-			THREAD = numCPU * 16
-		}
-		
-		if SIZE == 0 {
-			SIZE = 1472
-		}
-		
-		if BANDWIT == 0 {
-			BANDWIT = 2000
-		}
+	if THREAD == 0 {
+		THREAD = 8 // CloudShell jebol kalau terlalu tinggi
+	}
+
+	if SIZE == 0 {
+		SIZE = 1024 // Biar muatan enteng dan jalan mulus
+	}
+
+	if BANDWIT == 0 {
+		BANDWIT = 6000 // Uji coba, bisa disesuaikan real-time
+	}
 		
 		b = true
 	}
