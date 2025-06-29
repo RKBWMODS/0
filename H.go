@@ -280,7 +280,7 @@ func Config() {
 	}
 
 	if BANDWIT == 0 {
-		BANDWIT = 50
+		BANDWIT = 500
 	}
 		
 		b = true
