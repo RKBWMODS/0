@@ -269,15 +269,15 @@ func Config() {
 
 	default:
 	if THREAD == 0 {
-		THREAD = 8 // CloudShell jebol kalau terlalu tinggi
+		THREAD = 4 // CloudShell jebol kalau terlalu tinggi
 	}
 
 	if SIZE == 0 {
-		SIZE = 1024 // Biar muatan enteng dan jalan mulus
+		SIZE = 1472 // Biar muatan enteng dan jalan mulus
 	}
 
 	if BANDWIT == 0 {
-		BANDWIT = 6000 // Uji coba, bisa disesuaikan real-time
+		BANDWIT = 0 // Uji coba, bisa disesuaikan real-time
 	}
 		
 		b = true
