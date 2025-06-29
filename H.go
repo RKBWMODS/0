@@ -119,15 +119,15 @@ func main() {
 		payloadPool.Put(payloadPool.New())
 	}
 
-	fmt.Printf("\n📢 LINK : %s\n", LINK)
-	fmt.Printf("🦄 IP   : %s\n", IPT)
-	fmt.Printf("🪓 PORT : %v\n", openPorts)
-	fmt.Printf("📈 PAYL : %d \n", SIZE)
-	fmt.Printf("💣 THRD : %d\n", THREAD)
-	fmt.Printf("✅ RATE : %d \n", atomic.LoadInt32(&RATE))
-	fmt.Printf("🧭 TIME : %d \n", duration)
-	fmt.Printf("🗿 MBPS : %d \n", BANDWIT)
-	fmt.Printf("♿ START: %s\n\n", envType())
+	fmt.Printf("\n LINK : %s\n", LINK)
+	fmt.Printf(" IP   : %s\n", IPT)
+	fmt.Printf(" PORT : %v\n", openPorts)
+	fmt.Printf(" PAYL : %d \n", SIZE)
+	fmt.Printf(" THRD : %d\n", THREAD)
+	fmt.Printf(" RATE : %d \n", atomic.LoadInt32(&RATE))
+	fmt.Printf(" TIME : %d \n", duration)
+	fmt.Printf(" MBPS : %d \n", BANDWIT)
+	fmt.Printf(" START: %s\n\n", envType())
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -184,23 +184,26 @@ func envType() string {
 func Logo() string {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print(`
+	
+	
 ⠀⠀⠀⠀⠀⠀⠀⠀⣀⣤⣴⣶⣾⡿⠿⠿⢿⣷⣶⣦⣤⣀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⣠⣴⣿⠟⠋⠉⠀⣀⣤⣤⣤⣤⣤⣀⡉⠙⠻⣿⣦⣄⠀⠀⠀⠀⠀
 ⠀⠀⠀⣠⣾⡿⠋⢀⡄⠀⣰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣀⠙⢿⣷⣄⠀⠀⠀
 ⠀⠀⣴⣿⠋⢀⣴⣿⠀⢰⣿⣿⣿⡟⠛⢻⣿⣿⣿⣿⣿⣿⣿⣷⡄⠙⣿⣦⠀⠀
 ⠀⣼⡿⠁⣰⣿⣿⡇⠀⢸⣿⣿⣿⣧⣀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆⠈⢿⣧⠀
-⣾⣿⠃⢰⣿⣿⣿⣿⡀⠈⢿⣿⣿⣿⣿⣿⣿⠿⠟⠛⠛⠛⠛⠿⣿⣿⡄⠘⣿⡆
+⢰⣿⠃⢰⣿⣿⣿⣿⡀⠈⢿⣿⣿⣿⣿⣿⣿⠿⠟⠛⠛⠛⠛⠿⣿⣿⡄⠘⣿⡆
 ⣾⡿⠀⣾⣿⣿⣿⣿⣷⣄⠀⠙⠿⣿⡿⠋⠁⢀⣤⣤⣶⣦⣤⣀⠀⠙⢷⠀⢿⣷
 ⣿⡇⠀⣿⣿⣿⣿⣿⣿⣿⣷⣤⣀⡀⠀⠀⢼⣿⣿⣿⣿⣿⣿⣿⣷⣄⠈⠀⢸⣿
 ⢿⣷⠀⢿⣿⣿⣿⣿⣿⠿⣿⣿⣿⣿⣷⠀⠘⣿⣿⣿⠟⠛⢿⣿⣿⣿⡀⠀⣾⡿
-⢿⣿⡄⠸⣿⣿⣿⣿⡁⠀⣸⣿⣿⣿⣿⠀⢠⣿⣿⣿⣦⣤⣾⣿⣿⣿⠃⢠⣿⠇
+⠸⣿⡄⠸⣿⣿⣿⣿⡁⠀⣸⣿⣿⣿⣿⠀⢠⣿⣿⣿⣦⣤⣾⣿⣿⣿⠃⢠⣿⠇
 ⠀⢻⣷⡀⠹⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⠏⢀⣾⡟⠀
 ⠀⠀⠻⣿⣄⠈⠛⠿⣿⣿⡿⠿⠋⠁⢀⣼⣿⣿⣿⣿⣿⣿⣿⡿⠋⣠⣿⠟⠀⠀
 ⠀⠀⠀⠙⢿⣷⣄⠀⠀⢀⣀⣠⣤⣶⣿⣿⣿⣿⣿⣿⡿⠟⠉⣠⣾⡿⠋⠀⠀⠀
 ⠀⠀⠀⠀⠀⠙⠻⣿⣦⣄⣈⠉⠙⠛⠛⠛⠛⠛⠉⣁⣠⣴⣿⠟⠋⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠉⠛⠻⠿⢿⣷⣶⣶⣾⡿⠿⠟⠛⠉⠀⠀⠀⠀⠀⠀⠀⠀
+
 ` + version + `
-⼳ : `)
+ : `)
 	input, _ := reader.ReadString('\n')
 	return strings.TrimSpace(input)
 }
@@ -269,15 +272,15 @@ func Config() {
 
 	default:
 	if THREAD == 0 {
-		THREAD = 4 // CloudShell jebol kalau terlalu tinggi
+		THREAD = 5 
 	}
 
 	if SIZE == 0 {
-		SIZE = 1472 // Biar muatan enteng dan jalan mulus
+		SIZE = 1024
 	}
 
 	if BANDWIT == 0 {
-		BANDWIT = 0 // Uji coba, bisa disesuaikan real-time
+		BANDWIT = 50
 	}
 		
 		b = true
@@ -451,7 +454,7 @@ func Status() {
 		bytesSent := float64(current * uint64(SIZE))
 		BANDWIDTH := (bytesSent * 8 / 1000000) / TTE
 		
-		fmt.Printf("\r🚀%d 🎁%.0f 📤%.2f 🧭%.0fs ⚡%d", 
+		fmt.Printf("\r%d %.0f %.2f %.0fs %d", 
 			current, PPS, BANDWIDTH, TTE, activeThreads.Load())
 		
 		lastSent = current
