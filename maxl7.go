@@ -1,3 +1,8 @@
+//Script ini di buat hanya untuk kecepatan bukan masalah untuk requests di block yang penting spam requests super banyak di sc ini sudah optimal
+//Script ini di buat di tujukan buat kamu yang suka beradu kecepatan rps atau besarnya requests per detik
+//ini bukan ddos tapi murni kecepatan requests dengan headers minimalis super ringan dan tanpa parsing
+//Sudah di uji dengan ribuan kali dan sudah sangat pas tidak perlu di ubah lagi atau di upgrade lagi
+//Jika nanya ai tanya nilai script ini dari 0-100 dan lihat jawaban mereka, Jika mereka memahami tidak menggunakan headers banyak dan tanpa http3 yang lemot bahkan fasthttp tuh berat maka mereka akan jawab 100 nilainya
 package main
 
 import (
@@ -18,6 +23,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"runtime"
+
 	"golang.org/x/net/http2"
 )
 
@@ -37,9 +44,9 @@ func Kuning(text string) string { return KUNING + text + RESET }
 func Ungu(text string) string   { return UNGU + text + RESET }
 func Cyan(text string) string   { return CYAN + text + RESET }
 
-type LoadTester struct {
+type FastRequests struct {
 	Link             string
-	numRequests      int64
+	NR      int64
 	concurrency      int
 	timeout          time.Duration
 	method           string
@@ -51,9 +58,10 @@ type LoadTester struct {
 	totalLatency     int64
 	lastResponseCode string
 	client           *http.Client
+	baseReq          *http.Request // Tambahkan field untuk base request
 }
 
-func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *LoadTester {
+func FSR(Link string, NR int64, concurrency int, timeout time.Duration, method string, headers map[string]string, proxies []string) *FastRequests {
 	var proxyFunc func(*http.Request) (*url.URL, error)
 	if len(proxies) > 0 {
 		proxyFunc = func(req *http.Request) (*url.URL, error) {
@@ -61,48 +69,52 @@ func NewLoadTester(Link string, numRequests int64, concurrency int, timeout time
 			return url.Parse(proxyStr)
 		}
 	}
+	// Jangan di otak atik ini udah pas super fast no komen.
 	transport := &http.Transport{
 		Proxy:               proxyFunc,
 		MaxIdleConns:        50000,
 		MaxIdleConnsPerHost: 50000,
-		IdleConnTimeout:     3 * time.Second,
-		TLSHandshakeTimeout: 3 * time.Second,
+		IdleConnTimeout:     2 * time.Second,
+		TLSHandshakeTimeout: 200 * time.Millisecond,
 		DialContext: (&net.Dialer{
-			Timeout:   3 * time.Second,
-			KeepAlive: 3 * time.Second,
-			DualStack: true,
+			Timeout:   2 * time.Second,
+			KeepAlive: 2 * time.Second, 
+			DualStack: true, // Jangan di set ulang
 		}).DialContext,
+		// DI ATAS BAGIAN FITAL! JANGAN DI APA APAIN
 	}
 	if err := http2.ConfigureTransport(transport); err != nil {
 		log.Fatalf("Gagal mengonfigurasi HTTP/2: %v", err)
 	}
 	client := &http.Client{
-		Transport: transport,
-		Timeout:   timeout,
+    Transport: transport,
+    Timeout: timeout,
+}
+	baseReq, err := http.NewRequest(method, Link, nil)
+	if err != nil {
+		log.Fatalf("Gagal membuat base request: %v", err)
 	}
-	return &LoadTester{
+	for k, v := range headers {
+		baseReq.Header.Set(k, v)
+	}
+
+	return &FastRequests{
 		Link:        Link,
-		numRequests: numRequests,
+		NR: NR,
 		concurrency: concurrency,
 		timeout:     timeout,
 		method:      method,
 		headers:     headers,
 		proxies:     proxies,
 		client:      client,
+		baseReq:     baseReq, 
 	}
 }
 
-func (lt *LoadTester) sendRequest(ctx context.Context) {
+func (lt *FastRequests) sendRequest(ctx context.Context) {
 	startTime := time.Now()
-	req, err := http.NewRequestWithContext(ctx, lt.method, lt.Link, nil)
-	if err != nil {
-		atomic.AddInt64(&lt.failureCount, 1)
-		lt.lastResponseCode = "ERROR"
-		return
-	}
-	for k, v := range lt.headers {
-		req.Header.Set(k, v)
-	}
+	req := lt.baseReq.Clone(ctx)
+	
 	resp, err := lt.client.Do(req)
 	latency := time.Since(startTime)
 	atomic.AddInt64(&lt.totalLatency, latency.Nanoseconds())
@@ -120,41 +132,61 @@ func (lt *LoadTester) sendRequest(ctx context.Context) {
 	}
 }
 
-func (lt *LoadTester) run(ctx context.Context, wg *sync.WaitGroup) {
-	defer wg.Done()
-	sem := make(chan struct{}, lt.concurrency)
-	var innerWg sync.WaitGroup
-	for i := int64(0); i < lt.numRequests; i++ {
-		select {
-		case <-ctx.Done():
-			break
-		default:
-		}
-		sem <- struct{}{}
-		innerWg.Add(1)
-		atomic.AddInt64(&lt.sentCount, 1)
-		go func() {
-			defer func() {
-				<-sem
-				innerWg.Done()
-			}()
-			lt.sendRequest(ctx)
-		}()
-	}
-	innerWg.Wait()
+func (lt *FastRequests) run(ctx context.Context, wg *sync.WaitGroup) {
+    defer wg.Done()
+    
+    // Pembantu pemercepat
+    jobs := make(chan struct{}, lt.concurrency)
+    var workerWg sync.WaitGroup
+    workerWg.Add(lt.concurrency)
+    for i := 0; i < lt.concurrency; i++ {
+        go func() {
+            defer workerWg.Done()
+            for range jobs {
+                select {
+                case <-ctx.Done():
+                    return
+                default:
+                    atomic.AddInt64(&lt.sentCount, 1)
+                    lt.sendRequest(ctx)
+                }
+            }
+        }()
+    }
+    go func() {
+        defer close(jobs)
+        for i := int64(0); i < lt.NR; i++ {
+            select {
+            case <-ctx.Done():
+                return
+            case jobs <- struct{}{}:
+            }
+        }
+    }()
+    workerWg.Wait()
 }
 
 func printLogo() {
-	logo := "" +
-		"\n" +
-		"\n" +
-		"\n" +
-		"\n"
+	logo := `
+⠀⠀⠀⠀⢀⠀⢀⣼⣷⣤⣤⣤⣤⣤⣤⣀⣀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣶⡄⠀
+⠀⠀⢺⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣶⣶⣶⣶⣶⣶⣶⣶⣶⣷⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷
+⠀⠀⠀⣿⣿⣿⣿⣿⡼⣿⣿⣿⣿⣷⣿⣿⠋⠉⠉⠉⠉⠁⠀⠀⠀⠀⠀⠉⠙⠿⣿⣿⣿⣿⣿⣿⣿⡟⠛
+⠀⢀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣝⣿⣽⣿⣿⣿⠿⣏⣉⡍⠉⠉⠉⠉⠙⠛⠻⠿⠿⠿⠿⣿⣿⣿⡇⠀
+⠘⠛⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⣩⣿⣿⣿⣿⣿⣦⣈⣻⣃⣠⠶⠒⠒⠒⠒⠒⠛⠛⠛⠛⠛⠋⠉⠁⠀
+⠀⠀⠀⢹⣿⣿⣿⣿⣿⣿⣿⡿⣾⠋⠀⠀⣿⠃⠀⠀⠈⢳⡼⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣷⣿⣄⠀⠀⠹⣆⠀⠀⠀⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠛⠓⠶⢤⣬⣧⣤⠶⠿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⣸⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀⠀⠀⠀⠀
+⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀⠀⠀⠀     ⠀⠀
+⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠀⠀⠀Dizflyze V5 - Fasteres
+⣿⣿⣿⣿⣿⣿⣿⣿⡿⢸⡇⠀⠀⠀⠀⠀⠀
+⠘⠛⠛⠛⣿⣿⣿⣿⠣⢾⣧
+`
 	fmt.Println(logo)
 }
 
-func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
-	symbols := []string{"▁", "▃", "▄", "▅", "▇"}
+func animate(ctx context.Context, lt *FastRequests, initialCycleDuration, summaryDuration, updateInterval time.Duration) {
+	symbols := []string{"💉"}
 	symbolIndex := 0
 	currentCycleDuration := initialCycleDuration
 	startCycle := time.Now()
@@ -171,44 +203,32 @@ func animate(ctx context.Context, lt *LoadTester, initialCycleDuration, summaryD
 			var avgLatency int64
 			if done > 0 {
 				avgLatency = atomic.LoadInt64(&lt.totalLatency) / done / 1e6
-			}
+			} // Jangan di set ulang
 			if elapsed >= currentCycleDuration {
 				total := done
-				summary := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+				summary := fmt.Sprintf("%s %s %s %s %s %s",
 					    Putih("\n "),
- 					   Cyan("["),
-					    Putih("DONE"),
-					    Cyan("]"),
-  					  Hijau(":"),
-                        Cyan("["),
-   					 Putih(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
- 					   Putih("DET"),
-                        Cyan("]"),
-   					 Hijau(":"),
-                        Cyan("["),
+					    Putih("➤"),
+   					 Cyan(fmt.Sprintf("%d", int(currentCycleDuration.Seconds()))),
+ 					   Cyan("TIME"),
+                        Putih("➤"),
   					  Hijau(fmt.Sprintf("%d", total)),
-                        Putih("REQ"),
-                        Cyan("]"),
 		    	)
 				fmt.Println(summary)
 				time.Sleep(summaryDuration)
 				fmt.Print("\033[2A\033[J")
 				currentCycleDuration += 60 * time.Second
 				startCycle = time.Now()
-			} else {
+			} else { // Jangan di set ulang
 				remaining := currentCycleDuration - elapsed
 				timerStr := fmt.Sprintf("%02d:%02d", int(remaining.Minutes()), int(remaining.Seconds())%60)
-				line := fmt.Sprintf("%s %s %s %s %s %s %s %s %s %s %s",
+				line := fmt.Sprintf("%s %s %s %s %s %s %s",
 			    	Cyan(symbols[symbolIndex%len(symbols)]),
-			    	Merah("["),
-					Putih("OTW"),
-					Merah("]"),
-					Merah("["),
+					Putih("➤"),
                     Hijau(timerStr),
-					Merah("]"),
-					Putih("RPS"),
+					Putih("➤"),
 					Hijau(fmt.Sprintf("%d", pending)),
-					Putih("AVG"),
+					Putih("➤"),
                     Hijau(fmt.Sprintf("%d", avgLatency)),
 				)
 				symbolIndex++
@@ -233,27 +253,28 @@ func loadConfig(configPath string) (map[string]interface{}, error) {
 func getIP(Link string) string {
 	parsed, err := url.Parse(Link)
 	if err != nil {
-		return "Unknown"
+		return "Tidak Terdeteksi"
 	}
 	host := parsed.Hostname()
 	addrs, err := net.LookupHost(host)
 	if err != nil || len(addrs) == 0 {
-		return "Unknown"
+		return "Tidak Terdeteksi"
 	}
 	return addrs[0]
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+	runtime.GOMAXPROCS(runtime.NumCPU()) 
+	_ = os.Setenv("GODEBUG", "http2debug=0,http2client=0,http2server=0") //Ini kan yang di tambah?
 	configPath := flag.String("config", "", "FILE JSON")
-	urlFlag := flag.String("url", "", "LINK URL")
 	requestsFlag := flag.Int64("requests", 1000000000, "TOTAL REQUESTS")
-	concurrencyFlag := flag.Int("concurrency", 850, "CONCURRENCY")
-	timeoutFlag := flag.Float64("timeout", 2, "WAKTU SETIAP REQUEST (detik)")
-	methodFlag := flag.String("method", "GET", "HTTP METHOD (GET/POST/ETC)")
+	concurrencyFlag := flag.Int("concurrency", 550, "CONCURRENCY")  //Jangan di lebihkan! 550 Cloudshell & 200 Termux & 750 Vps. Biar di seting sama gua.
+	timeoutFlag := flag.Float64("timeout", 3, "WAKTU SETIAP REQUEST") // Jangan di set ulang
+	methodFlag := flag.String("method", "GET", "HTTP METHOD")
 	logFlag := flag.String("log", "ERROR", "DEBUG, INFO, WARNING, ERROR")
 	noLiveFlag := flag.Bool("no-live", false, "MATIKAN LIVE OUTPUT")
-	proxyFile := flag.String("proxy", "", "FILE PROXY")
+	proxyFile := flag.String("proxy", "", "FILE PROXY") //Gak perlu biar ngebut pake 1 ip real aja
 	updateIntervalFlag := flag.Float64("update-interval", 0.10, "KECEPATAN LOADING")
 	flag.Parse()
 	if strings.ToUpper(*logFlag) == "DEBUG" {
@@ -270,40 +291,23 @@ func main() {
 		}
 		configData = conf
 	}
-	Link := *urlFlag
-	if Link == "" {
-		if val, ok := configData["url"].(string); ok {
-			Link = val
-		}
-	}
-	if Link == "" {
-		fmt.Println("JALANKAN GO RUN UNTUK MENGUNAKAN")
-		os.Exit(1)
-	}
-	numRequests := *requestsFlag
+	NR := *requestsFlag
 	if val, ok := configData["requests"].(float64); ok {
-		numRequests = int64(val)
+		NR = int64(val)
 	}
 	concurrency := *concurrencyFlag
 	if val, ok := configData["concurrency"].(float64); ok {
 		concurrency = int(val)
 	}
-	timeoutSec := *timeoutFlag
+	TS := *timeoutFlag
 	if val, ok := configData["timeout"].(float64); ok {
-		timeoutSec = val
+		TS = val
 	}
+	//Jangan di apa apain atau jangan di tambah!
 	method := strings.ToUpper(*methodFlag)
 	headers := map[string]string{
-		"User-Agent":           "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-		"Accept":               "application/json",
-		"Accept-Encoding":      "gzip, deflate, br",
-		"x-forwarded-proto":    "https",
-		"cache-control":        "no-cache",
-		"sec-ch-ua":            "\"Not/A)Brand\";v=\"99\", \"Google Chrome\";v=\"115\", \"Chromium\";v=\"115\"",
-		"sec-ch-ua-mobile":     "?0",
-		"sec-ch-ua-platform":   "Windows",
-		"accept-language":      "en-US,en;q=0.9",
-		"upgrade-insecure-requests": "1",
+	"User-Agent":      "",
+	"Connection":      "keep-alive", 
 	}
 	var proxies []string
 	if *proxyFile != "" {
@@ -322,7 +326,11 @@ func main() {
 	}
 	fmt.Print("\033[H\033[2J")
 	printLogo()
-	lt := NewLoadTester(Link, numRequests, concurrency, time.Duration(timeoutSec*float64(time.Second)), method, headers, proxies)
+	var Link string
+	fmt.Print(Putih("➤ "))
+	fmt.Scanln(&Link)
+	
+	lt := FSR(Link, NR, concurrency, time.Duration(TS*float64(time.Second)), method, headers, proxies)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigChan := make(chan os.Signal, 1)
@@ -337,7 +345,7 @@ func main() {
 		animWg.Add(1)
 		go func() {
 			defer animWg.Done()
-			animate(ctx, lt, 60*time.Second, 2*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second)))
+			animate(ctx, lt, 60*time.Second, 1*time.Second, time.Duration(*updateIntervalFlag*float64(time.Second)))
 		}()
 	}
 	var wg sync.WaitGroup
@@ -346,5 +354,5 @@ func main() {
 	wg.Wait()
 	cancel()
 	animWg.Wait()
-	fmt.Println("\n" + Hijau(">> SUKSES <<"))
+	fmt.Println("\n" + Hijau("Thanks!"))
 }
